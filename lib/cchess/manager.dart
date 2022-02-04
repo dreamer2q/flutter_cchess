@@ -1,9 +1,9 @@
-import 'package:flutter_cchess/cchess/cc_board.dart';
-
+import 'cc_board.dart';
 import 'cc_skin.dart';
 
 class GameManager {
   static final instance = GameManager._internal();
+  static const defaultDuration = Duration(milliseconds: 300);
 
   final skin = CcSkin();
   final board = CcBoard();
