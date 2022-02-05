@@ -1,5 +1,4 @@
-import 'package:flutter_cchess/cchess/cc_const.dart';
-
+import 'cc_const.dart';
 import 'cc_fen.dart';
 import 'cc_piece.dart';
 
@@ -90,9 +89,10 @@ class CcBoard with CcFenMixin {
   }
 
   bool isChecked() {
+    int selfside = CcRules.getSideTag(currentPlayerSd);
     CcPiecePos? kingPos;
     forEach((piece, pos) {
-      if (piece.pureCode == 0 /*king*/) {
+      if (piece.pieceCode == selfside + 0 /*king*/) {
         kingPos = pos;
       }
     });
@@ -100,8 +100,8 @@ class CcBoard with CcFenMixin {
       return false; /* missing kind */
     }
 
-    int src = kingPos!.index;
     int oppside = CcRules.getOppSideTag(currentPlayerSd);
+    int src = kingPos!.index;
 
     // 1. 判断是否被对方的兵(卒)将军
     if (chessboard[CcRules.squareForward(src, currentPlayerSd)].pieceCode ==
