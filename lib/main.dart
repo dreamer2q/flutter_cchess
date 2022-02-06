@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_cchess/cchess/cc_board.dart';
+import 'package:flutter_cchess/cchess/cc_fen.dart';
 import 'package:flutter_cchess/cchess/manager.dart';
+import 'package:flutter_cchess/engine/xqlite/position.dart';
+import 'package:flutter_cchess/engine/xqlite/search.dart';
 import 'package:flutter_cchess/widgets/chess_piece.dart';
 
 import 'cchess/cc_piece.dart';
@@ -58,6 +61,7 @@ class Chess extends StatefulWidget {
 
 class _ChessState extends State<Chess> {
   final game = GameManager.instance;
+  final xqwl = XqwlSearch();
 
   CcBoard get board => game.board;
   bool animating = false;
@@ -67,7 +71,7 @@ class _ChessState extends State<Chess> {
 
   void eventHandler(CcPiecePos pos) {
     final piece = board.get(pos);
-    if (!piece.isBlank && piece.playerSide == board.currentPlayerSide) {
+    if (!piece.isBlank && piece.matchSide(CcPlayerSide.red)) {
       _selectedPos = pos;
       _selectedPiece = piece;
       setState(() {});
@@ -134,10 +138,26 @@ class _ChessState extends State<Chess> {
           end: skin.pieceAlign(_destPos!),
           onEnd: () {
             board.set(_destPos!, _selectedPiece!);
+            final mv =
+                XqwlPosition.getMove(_selectedPos!.index, _destPos!.index);
+            xqwl.pos.makeMove(mv);
             _destPos = null;
             _selectedPos = null;
             setState(() {
               animating = false;
+              Future(() {
+                xqwl.searchMain();
+                xqwl.pos.makeMove(xqwl.mvResult);
+                final from =
+                    CcPiecePos.fromIndex(XqwlPosition.getSrc(xqwl.mvResult));
+                final to =
+                    CcPiecePos.fromIndex(XqwlPosition.getDst(xqwl.mvResult));
+                final move = CcPieceMov(from, to);
+                setState(() {
+                  board.movePiece(move);
+                  board.nextPlayerSide();
+                });
+              });
             });
           },
           child: skin.buildPiece(_selectedPiece!),
