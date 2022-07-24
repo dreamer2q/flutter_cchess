@@ -1,15 +1,50 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_cchess/cchess/cc_board.dart';
 import 'package:flutter_cchess/cchess/cc_fen.dart';
 import 'package:flutter_cchess/cchess/manager.dart';
+import 'package:flutter_cchess/chess/view/chess_page.dart';
 import 'package:flutter_cchess/engine/xqlite/position.dart';
 import 'package:flutter_cchess/engine/xqlite/search.dart';
 import 'package:flutter_cchess/widgets/chess_piece.dart';
 
+import 'package:bloc/bloc.dart';
 import 'cchess/cc_piece.dart';
 
+class AppBlocObserver extends BlocObserver {
+  @override
+  void onChange(BlocBase bloc, Change change) {
+    super.onChange(bloc, change);
+    log('onChange(${bloc.runtimeType}, $change)');
+  }
+
+  @override
+  void onError(BlocBase bloc, Object error, StackTrace stackTrace) {
+    log('onError(${bloc.runtimeType}, $error, $stackTrace)');
+    super.onError(bloc, error, stackTrace);
+  }
+}
+
 void main() {
-  runApp(const MyApp());
+  BlocOverrides.runZoned(
+    () => runApp(const MyApp()),
+    blocObserver: AppBlocObserver(),
+  );
+
+  SystemChrome.setSystemUIOverlayStyle(
+    SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 }
 
 class MyApp extends StatelessWidget {
@@ -23,7 +58,9 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const GamePlayPage(),
+      // debugShowCheckedModeBanner: false,
+      // home: const GamePlayPage(),
+      home: const ChessPage(),
     );
   }
 }
@@ -35,7 +72,10 @@ class GamePlayPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chinese Chess'),
+        elevation: 0,
+        title: Text('Chess'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
       ),
       body: FutureBuilder(
         future: GameManager().ready,
@@ -45,7 +85,10 @@ class GamePlayPage extends StatelessWidget {
               child: CircularProgressIndicator(),
             );
           }
-          return Chess();
+          return Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Chess(),
+          );
         },
       ),
     );
@@ -165,26 +208,120 @@ class _ChessState extends State<Chess> {
     ]);
 
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      // mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        FittedBox(
-          child: GestureDetector(
-            onTapUp: (TapUpDetails tap) {
-              final position = skin.offsetToPos(tap.localPosition);
-              debugPrint('tap: ${tap.localPosition}, $position');
-              if (!animating) eventHandler(position);
-            },
-            child: SizedBox(
-              width: skin.width,
-              height: skin.height,
-              child: Stack(
-                fit: StackFit.expand,
-                children: _layers,
+        Expanded(
+          child: FittedBox(
+            child: GestureDetector(
+              onTapUp: (TapUpDetails tap) {
+                final position = skin.offsetToPos(tap.localPosition);
+                debugPrint('tap: ${tap.localPosition}, $position');
+                if (!animating) eventHandler(position);
+              },
+              child: SizedBox(
+                width: skin.width,
+                height: skin.height,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: _layers,
+                ),
               ),
             ),
           ),
         ),
+        ChessMenu(),
       ],
+    );
+  }
+}
+
+class ChessMenu extends StatelessWidget {
+  const ChessMenu({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 48,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _MenuItem(
+            label: '菜单',
+            icon: Icons.menu,
+            onPressed: () {},
+          ),
+          _MenuItem(
+            label: '分析',
+            icon: Icons.analytics,
+            onPressed: () {},
+          ),
+          _MenuItem(
+            label: '悔棋',
+            icon: Icons.undo,
+            onPressed: () {},
+          ),
+          _MenuItem(
+            label: '提示',
+            icon: Icons.info_outline,
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuItem extends StatelessWidget {
+  const _MenuItem({
+    Key? key,
+    this.label = '',
+    required this.icon,
+    required this.onPressed,
+  }) : super(key: key);
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    bool down = false;
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      child: StatefulBuilder(
+        builder: (context, setter) {
+          final double size = down ? 32 : 38;
+          return GestureDetector(
+            onTapDown: (details) {
+              setter(() {
+                down = true;
+              });
+            },
+            onTapUp: (details) {
+              setter(() {
+                down = false;
+              });
+            },
+            onTap: onPressed,
+            child: AnimatedContainer(
+              width: size,
+              height: size,
+              duration: const Duration(milliseconds: 50),
+              child: FittedBox(
+                child: Column(
+                  children: [
+                    Icon(icon),
+                    Text(label),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
