@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/utils/utils.dart';
@@ -54,9 +55,9 @@ class ChessBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.select((ChessBloc bloc) => bloc.state);
-    final board = context.select((ChessBloc bloc) => bloc.state.board);
     final theme = context.select((ThemeBloc bloc) => bloc.state.theme);
+    final state = context.select((ChessBloc bloc) => bloc.state);
+    final board = state.board;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
@@ -90,7 +91,11 @@ class ChessBoard extends StatelessWidget {
                         final pos = p.position;
                         Widget child = theme.buildPiece(context, p);
 
-                        if (state is ChessIdle && state.selected == p) {
+                        if (state.animeMoveInvalid?.piece == p) {
+                          return const SizedBox();
+                        }
+
+                        if (state.selected == p) {
                           child = DecoratedBox(
                             decoration: BoxDecoration(
                               boxShadow: const [
@@ -127,7 +132,7 @@ class ChessBoard extends StatelessWidget {
                       }).toList(),
 
                       /// available move actions
-                      if (state is ChessIdle && state.selectedMoves != null)
+                      if (state.selectedMoves != null)
                         ...state.selectedMoves!.map((pos) {
                           // TODO(@dreamer2q) 加入显示延迟过度动画
                           return Align(
@@ -136,15 +141,29 @@ class ChessBoard extends StatelessWidget {
                           );
                         }),
 
-                      /// anime
-                      if (state is ChessBusyMoving)
-                        AnimatedMove(
-                          begin: theme.getAlignment(state.move.src),
-                          end: theme.getAlignment(state.move.dst),
-                          child: theme.buildPiece(context, state.move.piece),
+                      /// anime invalid move
+                      if (state.animeMoveInvalid != null)
+                        AnimatedInvalidMove(
+                          begin:
+                              theme.getAlignment(state.animeMoveInvalid!.src),
+                          end: theme.getAlignment(state.animeMoveInvalid!.dst),
+                          child: theme.buildPiece(
+                              context, state.animeMoveInvalid!.piece),
                           onEnd: () => context
                               .read<ChessBloc>()
-                              .add(PieceEndMovingEvent()),
+                              .add(const PieceInvalidMoveEnd()),
+                        ),
+
+                      /// anime move
+                      if (state.animeMove != null)
+                        AnimatedMove(
+                          begin: theme.getAlignment(state.animeMove!.src),
+                          end: theme.getAlignment(state.animeMove!.dst),
+                          child:
+                              theme.buildPiece(context, state.animeMove!.piece),
+                          onEnd: () => context
+                              .read<ChessBloc>()
+                              .add(const PieceEndMovingEvent()),
                         ),
                     ],
                   ),

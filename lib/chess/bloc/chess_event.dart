@@ -10,9 +10,11 @@ abstract class ChessEvent extends Equatable {
 class ChessInitialized extends ChessEvent {
   const ChessInitialized({
     this.initialBoard,
+    this.playMode = PlayMode.withAI,
   });
 
   final Board? initialBoard;
+  final PlayMode playMode;
 }
 
 class ChessBoardTapped extends ChessEvent {
@@ -30,4 +32,15 @@ class PieceBeginMovingEvent extends ChessEvent {
 
 class PieceEndMovingEvent extends ChessEvent {
   const PieceEndMovingEvent();
+}
+
+class PieceInvalidMoveBegin extends ChessEvent {
+  const PieceInvalidMoveBegin(this.piece, this.destination);
+
+  final Piece piece;
+  final PiecePosition destination;
+}
+
+class PieceInvalidMoveEnd extends ChessEvent {
+  const PieceInvalidMoveEnd();
 }

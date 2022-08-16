@@ -1,70 +1,69 @@
 part of 'chess_bloc.dart';
 
+enum BoardStatus { initialized, idle, busy }
+
+enum PlayMode { withSelf, withAI, withNetwork }
+
 class ChessState extends Equatable {
   const ChessState({
     required this.board,
-  });
-
-  final Board board;
-
-  @override
-  List<Object?> get props => [board];
-
-  ChessState copyWith({Board? board}) {
-    return ChessState(
-      board: board ?? this.board,
-    );
-  }
-}
-
-// /// 初始化中...不可操作
-// class ChessInitial extends ChessState {
-//   const ChessInitial({
-//     required List<Piece> pieces,
-//   }) : super(pieces: pieces);
-// }
-
-/// 空闲状态, 可操作
-class ChessIdle extends ChessState {
-  const ChessIdle({
-    required super.board,
     this.selected,
     this.selectedMoves,
+    this.animeMove,
+    this.animeMoveInvalid,
+    this.status = BoardStatus.busy,
+    this.playMode = PlayMode.withAI,
   });
 
+  /// 棋盘棋子状态
+  final Board board;
+
+  /// 当前 Player 选中的棋子
   final Piece? selected;
+
+  /// 当前选择的棋子可走子的位置
   final List<PiecePosition>? selectedMoves;
 
-  @override
-  List<Object?> get props => [board, selected, selectedMoves];
+  /// 当前正在执行走子动画
+  final PieceMove? animeMove;
+
+  /// 非法走子动画
+  final PieceMove? animeMoveInvalid;
+
+  /// 棋盘当前的状态
+  final BoardStatus status;
+
+  /// 当前运行模式
+  final PlayMode playMode;
 
   @override
-  ChessIdle copyWith({
+  List<Object?> get props => [
+        board,
+        selected,
+        selectedMoves,
+        animeMove,
+        animeMoveInvalid,
+        status,
+        playMode,
+      ];
+
+  ChessState copyWith({
     Board? board,
     Piece? selected,
     List<PiecePosition>? selectedMoves,
+    PieceMove? animeMove,
+    PieceMove? animeMoveInvalid,
+    BoardStatus? status,
+    PlayMode? playMode,
   }) {
-    return ChessIdle(
+    return ChessState(
       board: board ?? this.board,
-      selected: selected ?? this.selected,
-      selectedMoves: selectedMoves ?? this.selectedMoves,
+      selected: selected,
+      selectedMoves: selectedMoves,
+      animeMove: animeMove,
+      animeMoveInvalid: animeMoveInvalid,
+      status: status ?? this.status,
+      playMode: playMode ?? this.playMode,
     );
   }
 }
-
-/// 棋盘繁忙(走子中), 执行动画, 不可操作
-class ChessBusyMoving extends ChessState {
-  const ChessBusyMoving({
-    required super.board,
-    required this.move,
-  });
-
-  // 动画进行中, Board 状态尚未更新
-  final PieceMove move;
-
-  @override
-  List<Object?> get props => [board, move];
-}
-
-// /// 棋局结束
-// class ChessOver extends ChessState {}

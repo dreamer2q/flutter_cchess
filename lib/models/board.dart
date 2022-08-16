@@ -1,10 +1,7 @@
-import 'dart:math';
 import 'dart:typed_data';
-
 import 'package:equatable/equatable.dart';
-import 'package:flutter_cchess/models/piece.dart';
-
 import 'package:built_collection/built_collection.dart';
+import 'models.dart';
 
 extension _PiecePositionEx on PiecePosition {
   int get rawIndex => y * 16 + x;
@@ -32,21 +29,27 @@ class Board extends Equatable {
     return pieces.firstWhere((p) => p.position == position);
   }
 
-  // bool makeMove(PieceMove move) {}
-  BuiltList<PieceMove> addMove(PieceMove move) {
+  Board toBeginMoving(Piece piece) {
+    return copyWith(
+      pieces: pieces.rebuild(
+        (p) => p..remove(piece),
+      ),
+    );
+  }
+
+  Board toEndMoving(PieceMove move) {
+    return copyWith(
+      pieces: pieces.rebuild(
+        (p) => p
+          ..remove(get(move.dst))
+          ..add(move.dstPiece),
+      ),
+      moves: _addMove(move),
+    );
+  }
+
+  BuiltList<PieceMove> _addMove(PieceMove move) {
     return moves.rebuild((b) => b.add(move));
-  }
-
-  Board removePiece(Piece? piece) {
-    return copyWith(
-      pieces: pieces.rebuild((p) => p.remove(piece)),
-    );
-  }
-
-  Board addPiece(Piece piece) {
-    return copyWith(
-      pieces: pieces.rebuild((p) => p.add(piece)),
-    );
   }
 
   @override
