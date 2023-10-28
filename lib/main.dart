@@ -28,10 +28,8 @@ class AppBlocObserver extends BlocObserver {
 }
 
 void main() {
-  BlocOverrides.runZoned(
-    () => runApp(const MyApp()),
-    blocObserver: AppBlocObserver(),
-  );
+  Bloc.observer = AppBlocObserver();
+  runApp(const MyApp());
 
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle(

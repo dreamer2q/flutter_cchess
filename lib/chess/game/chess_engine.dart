@@ -22,6 +22,13 @@ class _RequestEvent {
   _RequestEvent(this.type, this.argument, this.completer);
 }
 
+class _ResponseEvent {
+  final _RequestEvent request;
+  final dynamic result;
+
+  _ResponseEvent(this.request, this.result);
+}
+
 class ChessEngine {
   static void _engineHandler(SendPort sendPort) {
     final XqwlSearch search = XqwlSearch();
@@ -33,19 +40,19 @@ class ChessEngine {
         switch (e.type) {
           case _RequestType.requestMove:
             search.searchMain();
-            e.completer.complete(search.mvResult);
+            sendPort.send(_ResponseEvent(message, search.mvResult));
             break;
           case _RequestType.makeMove:
             final int mv = e.argument;
             if (!search.pos.legalMove(mv)) {
-              return e.completer.completeError(
-                Exception('illegal move: $mv'),
-              );
+              sendPort.send(
+                  _ResponseEvent(message, Exception('illegal move: $mv')));
+              break;
             }
             if (!search.pos.makeMove(mv)) {
-              return e.completer.completeError(
-                Exception('king is checked'),
-              );
+              sendPort
+                  .send(_ResponseEvent(message, Exception('king is checked')));
+              break;
             }
             search.searchMain();
             final srcSq = GameBoard.getSrc(search.mvResult);
@@ -54,14 +61,14 @@ class ChessEngine {
               BoardUtil.makePiece(srcSq, search.pos.ucpcSquares[srcSq]),
               BoardUtil.makePosition(dstSq),
             );
-            e.completer.complete(move);
+            sendPort.send(_ResponseEvent(message, move));
             break;
           case _RequestType.resetBoard:
             search.pos.startup();
-            e.completer.complete(true);
+            sendPort.send(_ResponseEvent(message, true));
             break;
           case _RequestType.undoMove:
-            e.completer.completeError(UnimplementedError());
+            sendPort.send(_ResponseEvent(message, UnimplementedError()));
             break;
         }
       }
@@ -89,8 +96,8 @@ class ChessEngine {
   bool _initialized = false;
 
   void _onMessage(message) {
-    if (message is Completer) {
-      ///
+    if (message is _ResponseEvent) {
+      message.request.completer.complete(message.result);
     } else if (message is SendPort) {
       _sendPort = message;
       _initialized = true;

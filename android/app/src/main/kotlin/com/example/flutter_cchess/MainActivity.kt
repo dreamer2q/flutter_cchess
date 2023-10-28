@@ -1,4 +1,4 @@
-package wang.dreamer2q.flutter_cchess
+package com.example.flutter_cchess
 
 import io.flutter.embedding.android.FlutterActivity
 
