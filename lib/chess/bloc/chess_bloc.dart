@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_cchess/chess/game/game.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/models/board.dart';
@@ -76,9 +78,37 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   FutureOr<void> _onPieceBeginMoving(
       ChessEventMoveBegin event, Emitter<ChessState> emit) {
     bool isMovable = state.board!.isMovable(event.move);
+    PlayEffect? playEffect;
+    PlayStatus? playStatus;
+
+    if (isMovable) {
+      ChessPiece? piece = state.board!.getPiece(event.move.sqDst);
+      Board board = Board(
+        state.board!.actions.rebuild(
+          (b) => b..add(BoardMoveAction(event.move.mv)),
+        ),
+      );
+
+      if (board.innerBoard.isMate()) {
+        // 绝杀
+        playEffect = PlayEffect.mate;
+        playStatus = state.board!.isTurn(state.playSide)
+            ? PlayStatus.win
+            : PlayStatus.lose;
+      } else if (board.innerBoard.checked()) {
+        // 将军
+        playEffect = PlayEffect.check;
+      } else if (piece != null) {
+        // 吃
+        playEffect = PlayEffect.eat;
+      }
+    }
+
     emit(state.copyWith(
       animeMove: isMovable ? event.move : null,
       animeMoveInvalid: isMovable ? null : event.move,
+      playEffect: playEffect,
+      playStatus: playStatus,
       status: BoardStatus.busy,
     ));
   }
@@ -94,7 +124,9 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         ),
       );
 
-      if (_engine != null && !board.isTurn(state.playSide)) {
+      if (_engine != null &&
+          !board.isTurn(state.playSide) &&
+          state.playStatus == null) {
         _engine?.makeMove(move.mv).then(
               (mv) => add(
                 ChessEventMoveBegin(MovePos.mv(mv)),

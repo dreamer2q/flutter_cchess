@@ -864,7 +864,7 @@ class SquareBoard {
   /// 判断是否被杀
   bool isMate() {
     int i, nGenMoveNum, pcCaptured;
-    List<int> mvs = List.filled(MAX_GEN_MOVES, 0);
+    List<int> mvs = [];
 
     nGenMoveNum = generateMoves(mvs);
     for (i = 0; i < nGenMoveNum; i++) {

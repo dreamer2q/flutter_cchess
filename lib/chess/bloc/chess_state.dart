@@ -2,9 +2,13 @@ part of 'chess_bloc.dart';
 
 enum BoardStatus { initialized, idle, busy }
 
+enum PlaySide { red, black }
+
 enum PlayMode { withSelf, withAI, withNetwork }
 
-enum PlaySide { red, black }
+enum PlayEffect { eat, check, mate }
+
+enum PlayStatus { draw, win, lose }
 
 class ChessState extends Equatable {
   const ChessState({
@@ -17,6 +21,8 @@ class ChessState extends Equatable {
     this.playMode = PlayMode.withAI,
     this.playSide = PlaySide.red,
     this.hintMoves,
+    this.playEffect,
+    this.playStatus,
   });
 
   /// 棋盘棋子状态
@@ -43,7 +49,14 @@ class ChessState extends Equatable {
   /// 玩家选择的阵营(默认red)
   final PlaySide playSide;
 
+  /// 电脑提示走法
   final BuiltList<MovePos>? hintMoves;
+
+  /// 动画效果
+  final PlayEffect? playEffect;
+
+  /// 棋局结果
+  final PlayStatus? playStatus;
 
   @override
   List<Object?> get props => [
@@ -52,10 +65,12 @@ class ChessState extends Equatable {
         selectedMoves,
         animeMove,
         animeMoveInvalid,
-        status,
+        hintMoves,
         playMode,
         playSide,
-        hintMoves,
+        playEffect,
+        playStatus,
+        status,
       ];
 
   ChessState copyWith({
@@ -68,6 +83,8 @@ class ChessState extends Equatable {
     PlayMode? playMode,
     PlaySide? playSide,
     BuiltList<MovePos>? hintMoves,
+    PlayEffect? playEffect,
+    PlayStatus? playStatus,
   }) {
     return ChessState(
       board: board ?? this.board,
@@ -79,6 +96,8 @@ class ChessState extends Equatable {
       playMode: playMode ?? this.playMode,
       playSide: playSide ?? this.playSide,
       hintMoves: hintMoves ?? this.hintMoves,
+      playEffect: playEffect,
+      playStatus: playStatus ?? this.playStatus,
     );
   }
 }

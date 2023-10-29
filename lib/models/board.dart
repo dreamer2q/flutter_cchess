@@ -73,7 +73,11 @@ class Board extends Equatable {
   }
 
   bool isMovable(MovePos move) {
-    return getMoves(move.sqSrc).contains(move);
+    int pcCaptured = innerBoard.moveCaptured(move.mv);
+    bool canMove =
+        innerBoard.legalMove(move.mv) && innerBoard.makeMove(move.mv);
+    if (canMove) innerBoard.undoMakeMove(move.mv, pcCaptured);
+    return canMove;
   }
 
   ChessPiece? getPiece(int sq) {

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
+import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/utils/utils.dart';
@@ -36,6 +38,67 @@ class ChessView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    handleGameStatus(BuildContext context, ChessState state) {
+      if (state.playEffect != null) {
+        PlayEffect playEffect = state.playEffect!;
+        switch (playEffect) {
+          case PlayEffect.check:
+            AnimatedOverlay.show(
+              context: context,
+              child: Align(
+                alignment: Alignment.center,
+                child: Container(
+                  child: Text(
+                    '吃',
+                    style: TextStyle(
+                      fontSize: 32,
+                    ),
+                  ),
+                ),
+              ),
+            );
+            break;
+
+          case PlayEffect.eat:
+            AnimatedOverlay.show(
+              context: context,
+              child: Align(
+                alignment: Alignment.center,
+                child: Container(
+                  child: Text(
+                    '吃',
+                    style: TextStyle(
+                      fontSize: 48,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+              ),
+            );
+            break;
+
+          case PlayEffect.mate:
+            AnimatedOverlay.show(
+              context: context,
+              child: Align(
+                alignment: Alignment.center,
+                child: Container(
+                  child: Text(
+                    '吃',
+                    style: TextStyle(
+                      fontSize: 32,
+                    ),
+                  ),
+                ),
+              ),
+            );
+            break;
+        }
+      }
+
+      if (state.playStatus != null) {}
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -48,7 +111,13 @@ class ChessView extends StatelessWidget {
       body: Column(
         children: [
           Expanded(
-            child: ChessBoard(),
+            child: BlocListener<ChessBloc, ChessState>(
+              listenWhen: (previous, current) {
+                return previous.playEffect != current.playEffect;
+              },
+              listener: handleGameStatus,
+              child: ChessBoard(),
+            ),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -76,21 +145,6 @@ class ChessView extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class MyColor extends MaterialStateColor {
-  const MyColor() : super(_defaultColor);
-
-  static const int _defaultColor = 0xcafefeed;
-  static const int _pressedColor = 0xdeadbeef;
-
-  @override
-  Color resolve(Set<MaterialState> states) {
-    if (states.contains(MaterialState.pressed)) {
-      return const Color(_pressedColor);
-    }
-    return const Color(_defaultColor);
   }
 }
 
@@ -221,7 +275,6 @@ class ChessBoard extends StatelessWidget {
                         ),
 
                       /// hints
-                      ///
                     ],
                   ),
                 ),

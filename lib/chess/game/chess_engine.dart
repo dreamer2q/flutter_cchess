@@ -3,32 +3,6 @@ import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_cchess/engine/xqlite/search.dart';
-import 'package:flutter_cchess/models/piece.dart';
-import 'package:flutter_cchess/utils/board.dart';
-
-import 'game_board.dart';
-
-enum _RequestType {
-  resetBoard,
-  requestMove,
-  makeMove,
-  undoMove,
-}
-
-class _RequestEvent {
-  final _RequestType type;
-  final dynamic argument;
-  final Completer completer;
-
-  _RequestEvent(this.type, this.argument, this.completer);
-}
-
-class _ResponseEvent {
-  final _RequestEvent request;
-  final dynamic result;
-
-  _ResponseEvent(this.request, this.result);
-}
 
 class _Request<T> {
   static int incrementalId = 1;
