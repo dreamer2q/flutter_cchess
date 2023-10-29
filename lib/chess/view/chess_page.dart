@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
+import 'package:flutter_cchess/chess/widget/chess_menu.dart';
+import 'package:flutter_cchess/main.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
+import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
 
 import '../bloc/chess_bloc.dart';
@@ -22,7 +24,7 @@ class ChessPage extends StatelessWidget {
           create: (_) => ThemeBloc(),
         ),
         BlocProvider(
-          create: (_) => ChessBloc()
+          create: (_) => ChessBloc(ticker: Ticker())
             ..add(ChessEventInitialized(
               initialBoard: FenUtil.parse(initialFenString),
             )),
@@ -49,10 +51,8 @@ class ChessView extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Container(
                   child: Text(
-                    '吃',
-                    style: TextStyle(
-                      fontSize: 32,
-                    ),
+                    '将军',
+                    style: TextStyle(fontSize: 32),
                   ),
                 ),
               ),
@@ -84,7 +84,7 @@ class ChessView extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Container(
                   child: Text(
-                    '吃',
+                    '绝杀',
                     style: TextStyle(
                       fontSize: 32,
                     ),
@@ -96,52 +96,56 @@ class ChessView extends StatelessWidget {
         }
       }
 
-      if (state.playStatus != null) {}
+      if (state.playStatus != null) {
+        PlayStatus status = state.playStatus!;
+        showDialog(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: Text("Game Over"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (status == PlayStatus.win) Text("You win!"),
+                  if (status == PlayStatus.lose) Text("You lose!"),
+                  if (status == PlayStatus.draw) Text("draw!"),
+                ],
+              ),
+            );
+          },
+        );
+      }
     }
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.close),
+          color: Colors.black,
+          onPressed: () {},
+        ),
         title: const Text(
           'ChessView',
           style: TextStyle(color: Colors.green),
         ),
         shadowColor: Colors.transparent,
         backgroundColor: Colors.transparent,
+        actions: [],
       ),
       body: Column(
         children: [
           Expanded(
             child: BlocListener<ChessBloc, ChessState>(
               listenWhen: (previous, current) {
-                return previous.playEffect != current.playEffect;
+                return previous.playEffect != current.playEffect ||
+                    previous.playStatus != current.playStatus;
               },
               listener: handleGameStatus,
               child: ChessBoard(),
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              TextButton(
-                child: Text('Restart'),
-                onPressed: () {},
-              ),
-              TextButton(
-                child: Text("Hint"),
-                onPressed: () {
-                  context.read<ChessBloc>().add(ChessEventGetHint());
-                },
-              ),
-              BlocBuilder<ChessBloc, ChessState>(
-                builder: (context, state) => TextButton(
-                  onPressed: state.board!.lastMoves.length > 1
-                      ? () => context.read<ChessBloc>().add(ChessEventUndo())
-                      : null,
-                  child: Text('Undo'),
-                ),
-              ),
-            ],
-          ),
+          ChessBoardMenu(),
+          SizedBox(height: 12),
         ],
       ),
     );
@@ -186,7 +190,7 @@ class ChessBoard extends StatelessWidget {
                   child: Stack(
                     children: [
                       // chess
-                      ...board!.pcPairs.map((p) {
+                      ...board.pcPairs.map((p) {
                         int sq = p.sq;
 
                         if (state.animeMoveInvalid?.sqSrc == sq ||
@@ -194,36 +198,11 @@ class ChessBoard extends StatelessWidget {
                           return const SizedBox();
                         }
 
-                        Widget child = theme.buildPiece(context, p.piece);
-
+                        Widget child;
                         if (state.selected?.sq == p.sq) {
-                          child = DecoratedBox(
-                            decoration: BoxDecoration(
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color.fromRGBO(0, 0, 0, .2),
-                                  offset: Offset(2, 2),
-                                  blurRadius: 1,
-                                  spreadRadius: 0,
-                                ),
-                                BoxShadow(
-                                  color: Color.fromRGBO(0, 0, 0, .1),
-                                  offset: Offset(3, 3),
-                                  blurRadius: 1,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                              border: Border.all(
-                                color: Colors.white54,
-                                width: 2,
-                                style: BorderStyle.solid,
-                              ),
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(57 / 2),
-                              ),
-                            ),
-                            child: child,
-                          );
+                          child = theme.buildSelectedPiece(context, p.piece);
+                        } else {
+                          child = theme.buildPiece(context, p.piece);
                         }
 
                         return Align(
@@ -235,7 +214,6 @@ class ChessBoard extends StatelessWidget {
                       /// available move actions
                       if (state.selectedMoves != null)
                         ...state.selectedMoves!.map((mv) {
-                          // TODO(@dreamer2q) 加入显示延迟过度动画
                           return Align(
                             alignment: theme.getAlignment(mv.dstPos),
                             child: theme.buildPieceMask(context),
@@ -251,7 +229,7 @@ class ChessBoard extends StatelessWidget {
                               .getAlignment(state.animeMoveInvalid!.dstPos),
                           child: theme.buildPiece(
                             context,
-                            state.board!
+                            state.board
                                 .getPiece(state.animeMoveInvalid!.sqSrc)!,
                           ),
                           onEnd: () => context
@@ -261,13 +239,13 @@ class ChessBoard extends StatelessWidget {
 
                       /// anime move
                       if (state.animeMove != null &&
-                          state.board!.getPiece(state.animeMove!.sqSrc) != null)
+                          state.board.getPiece(state.animeMove!.sqSrc) != null)
                         AnimatedMove(
                           begin: theme.getAlignment(state.animeMove!.srcPos),
                           end: theme.getAlignment(state.animeMove!.dstPos),
                           child: theme.buildPiece(
                             context,
-                            state.board!.getPiece(state.animeMove!.sqSrc)!,
+                            state.board.getPiece(state.animeMove!.sqSrc)!,
                           ),
                           onEnd: () => context
                               .read<ChessBloc>()

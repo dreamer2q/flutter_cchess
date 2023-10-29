@@ -12,7 +12,7 @@ enum PlayStatus { draw, win, lose }
 
 class ChessState extends Equatable {
   const ChessState({
-    this.board,
+    required this.board,
     this.selected,
     this.selectedMoves,
     this.animeMove,
@@ -26,7 +26,7 @@ class ChessState extends Equatable {
   });
 
   /// 棋盘棋子状态
-  final Board? board;
+  final Board board;
 
   /// 当前 Player 选中的棋子
   final PiecePair? selected;
@@ -57,6 +57,11 @@ class ChessState extends Equatable {
 
   /// 棋局结果
   final PlayStatus? playStatus;
+
+  // 时间相关
+  // 开始时间
+  // 总时间
+  // 每人时间
 
   @override
   List<Object?> get props => [
@@ -101,3 +106,5 @@ class ChessState extends Equatable {
     );
   }
 }
+
+// class ChessInitialState extends ChessState {}

@@ -1,21 +1,23 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_cchess/chess/game/game.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:flutter_cchess/timer/ticker.dart';
 
 part 'chess_event.dart';
 part 'chess_state.dart';
 
 class ChessBloc extends Bloc<ChessEvent, ChessState> {
-  ChessBloc()
-      : super(ChessState(
+  final Ticker ticker;
+
+  ChessBloc({
+    required this.ticker,
+  }) : super(ChessState(
           board: Board(BuiltList.of([])),
         )) {
     on<ChessEventInitialized>(_onInitialized);
@@ -77,22 +79,25 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   FutureOr<void> _onPieceBeginMoving(
       ChessEventMoveBegin event, Emitter<ChessState> emit) {
-    bool isMovable = state.board!.isMovable(event.move);
+    bool isMovable = state.board.isMovable(event.move);
     PlayEffect? playEffect;
     PlayStatus? playStatus;
 
     if (isMovable) {
-      ChessPiece? piece = state.board!.getPiece(event.move.sqDst);
+      ChessPiece? piece = state.board.getPiece(event.move.sqDst);
       Board board = Board(
-        state.board!.actions.rebuild(
+        state.board.actions.rebuild(
           (b) => b..add(BoardMoveAction(event.move.mv)),
         ),
       );
 
+      // playStatus =
+      // state.board.isTurn(state.playSide) ? PlayStatus.win : PlayStatus.lose;
+
       if (board.innerBoard.isMate()) {
         // 绝杀
         playEffect = PlayEffect.mate;
-        playStatus = state.board!.isTurn(state.playSide)
+        playStatus = state.board.isTurn(state.playSide)
             ? PlayStatus.win
             : PlayStatus.lose;
       } else if (board.innerBoard.checked()) {

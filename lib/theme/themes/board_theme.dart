@@ -19,6 +19,9 @@ abstract class BoardTheme extends Equatable {
 
   Widget buildPiece(BuildContext context, ChessPiece piece);
 
+  Widget buildSelectedPiece(BuildContext context, ChessPiece piece) =>
+      buildPiece(context, piece);
+
   Widget buildPieceMask(BuildContext context);
 
   Alignment getAlignment(PiecePos pos);
