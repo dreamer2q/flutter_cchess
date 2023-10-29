@@ -117,36 +117,41 @@ class ChessView extends StatelessWidget {
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: Icon(Icons.close),
-          color: Colors.black,
-          onPressed: () {},
-        ),
-        title: const Text(
-          'ChessView',
-          style: TextStyle(color: Colors.green),
-        ),
-        shadowColor: Colors.transparent,
-        backgroundColor: Colors.transparent,
-        actions: [],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: BlocListener<ChessBloc, ChessState>(
-              listenWhen: (previous, current) {
-                return previous.playEffect != current.playEffect ||
-                    previous.playStatus != current.playStatus;
-              },
-              listener: handleGameStatus,
-              child: ChessBoard(),
-            ),
+    return WillPopScope(
+      onWillPop: () async {
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: Icon(Icons.close),
+            color: Colors.black,
+            onPressed: () {},
           ),
-          ChessBoardMenu(),
-          SizedBox(height: 12),
-        ],
+          title: const Text(
+            'ChessView',
+            style: TextStyle(color: Colors.green),
+          ),
+          shadowColor: Colors.transparent,
+          backgroundColor: Colors.transparent,
+          actions: [],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: BlocListener<ChessBloc, ChessState>(
+                listenWhen: (previous, current) {
+                  return previous.playEffect != current.playEffect ||
+                      previous.playStatus != current.playStatus;
+                },
+                listener: handleGameStatus,
+                child: ChessBoard(),
+              ),
+            ),
+            ChessBoardMenu(),
+            SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
