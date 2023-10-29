@@ -91,3 +91,6 @@ class Piece extends Equatable {
   @override
   String toString() => 'Piece{${kind.char}, ${side.char}, $position}';
 }
+
+// Piece{side:, kind:, x:, y:}
+// Move [Piece1, Piece2]

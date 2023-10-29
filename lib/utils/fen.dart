@@ -52,4 +52,39 @@ abstract class FenUtil {
       moves: BuiltList(),
     );
   }
+
+  static Board2 parse2(String fenString) {
+    final parts = fenString.split(' ');
+    final fenPos = parts.first;
+    final pieces = <BoardAction>[];
+    if (fenPos.isNotEmpty) {
+      final rows = fenPos.split('/');
+      if (rows.length != 10) {
+        throw Exception('rows.length != 10');
+      }
+      int i = 0;
+      for (final row in rows.reversed) {
+        row.split('').forEach((char) {
+          if (char.compareTo('0') >= 0 && char.compareTo('9') <= 0) {
+            final skipNum = int.tryParse(char) ?? 0;
+            i += skipNum;
+          } else {
+            final kind = charToKind[char.toLowerCase()];
+            if (kind == null) {
+              throw Exception('invalid format: $char not recognizable');
+            }
+            final side = char.isLowerCase() ? PieceSide.RED : PieceSide.BLACK;
+            final piece = Piece(kind, side, PiecePosition.fromIndex(i));
+            pieces.add(PutPieceAction(piece));
+            i++;
+          }
+        });
+      }
+      // TODO: parse piece moves
+    }
+
+    return Board2(
+      actions: BuiltList.of(pieces),
+    );
+  }
 }

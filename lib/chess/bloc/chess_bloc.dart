@@ -4,18 +4,16 @@ import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cchess/chess/game/game.dart';
+import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/models/piece.dart';
-import 'package:built_collection/built_collection.dart';
+import 'package:flutter_cchess/utils/utils.dart';
 
 part 'chess_event.dart';
 part 'chess_state.dart';
 
 class ChessBloc extends Bloc<ChessEvent, ChessState> {
-  ChessBloc()
-      : super(ChessState(
-          board: Board(pieces: BuiltList(), moves: BuiltList()),
-        )) {
+  ChessBloc() : super(ChessState()) {
     on<ChessInitialized>(_onInitialized);
     on<ChessBoardTapped>(_onBoardTapped);
     on<PieceBeginMovingEvent>(_onPieceBeginMoving);
@@ -53,11 +51,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       ChessBoardTapped event, Emitter<ChessState> emit) {
     if (state.status != BoardStatus.idle) return null;
 
-    final piece = state.board.get(event.position);
+    final piece = state.board?.get(event.position);
     final selected = state.selected;
 
     if (piece != null) {
-      if (selected == null || piece.isSameSide(selected)) {
+      if (selected == null || selected.isSameSide(piece)) {
         if (_game.isSelectable(piece)) {
           emit(state.copyWith(
             selected: piece,
@@ -79,7 +77,6 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     if (_game.makeMove(event.piece.position, event.destination)) {
       emit(
         state.copyWith(
-          board: state.board.toBeginMoving(event.piece),
           animeMove: PieceMove(event.piece, event.destination),
           status: BoardStatus.busy,
         ),
@@ -96,15 +93,23 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       final move = state.animeMove!;
       emit(
         state.copyWith(
-          board: state.board.toEndMoving(move),
+          board: state.board!.nextAction(
+            MovePieceAction(move.piece, move.dst),
+          ),
           status: BoardStatus.idle,
         ),
       );
       if (_engine != null) {
-        _engine?.resultForMove(move).then((move) {
-          debugPrint('test');
-          add(PieceBeginMovingEvent(move.piece, move.dst));
-        });
+        if (state.board!.currentPlayer == BoardSide.BlackPlayer) {
+          _engine?.resultForMove(move).then((move) {
+            int sqSrc = GameBoard.getSrc(move);
+            int sqDst = GameBoard.getDst(move);
+            Piece originPiece =
+                state.board!.get(BoardUtil.makePosition(sqSrc))!;
+            add(PieceBeginMovingEvent(
+                originPiece, BoardUtil.makePosition(sqDst)));
+          });
+        }
       }
     }
   }

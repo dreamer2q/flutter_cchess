@@ -13,7 +13,7 @@ class ChessInitialized extends ChessEvent {
     this.playMode = PlayMode.withAI,
   });
 
-  final Board? initialBoard;
+  final Board2? initialBoard;
   final PlayMode playMode;
 }
 

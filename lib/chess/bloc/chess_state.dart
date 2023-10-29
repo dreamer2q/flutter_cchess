@@ -6,7 +6,7 @@ enum PlayMode { withSelf, withAI, withNetwork }
 
 class ChessState extends Equatable {
   const ChessState({
-    required this.board,
+    this.board,
     this.selected,
     this.selectedMoves,
     this.animeMove,
@@ -16,7 +16,7 @@ class ChessState extends Equatable {
   });
 
   /// 棋盘棋子状态
-  final Board board;
+  final Board2? board;
 
   /// 当前 Player 选中的棋子
   final Piece? selected;
@@ -48,7 +48,7 @@ class ChessState extends Equatable {
       ];
 
   ChessState copyWith({
-    Board? board,
+    Board2? board,
     Piece? selected,
     List<PiecePosition>? selectedMoves,
     PieceMove? animeMove,

@@ -21,7 +21,7 @@ class ChessPage extends StatelessWidget {
         BlocProvider(
           create: (_) => ChessBloc()
             ..add(ChessInitialized(
-              initialBoard: FenUtil.parse(initialFenString),
+              initialBoard: FenUtil.parse2(initialFenString),
             )),
         ),
       ],
@@ -87,11 +87,12 @@ class ChessBoard extends StatelessWidget {
                   child: Stack(
                     children: [
                       // chess
-                      ...board.pieces.map((p) {
+                      ...board!.pieces.map((p) {
                         final pos = p.position;
                         Widget child = theme.buildPiece(context, p);
 
-                        if (state.animeMoveInvalid?.piece == p) {
+                        if (state.animeMoveInvalid?.piece == p ||
+                            state.animeMove?.piece == p) {
                           return const SizedBox();
                         }
 
