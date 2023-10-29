@@ -120,6 +120,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   FutureOr<void> _onPieceEndMoving(
       ChessEventMoveEnd event, Emitter<ChessState> emit) {
+    MovePos? lastMove;
     MovePos? move = state.animeMove;
     Board board = state.board;
     if (move != null) {
@@ -128,6 +129,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           (b) => b..add(BoardMoveAction(move.mv)),
         ),
       );
+      lastMove = MovePos.mv(move.mv);
 
       if (_engine != null &&
           !board.isTurn(state.playSide) &&
@@ -146,6 +148,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       animeMoveInvalid: null,
       selected: move != null ? null : state.selected,
       selectedMoves: move != null ? BuiltList.of([]) : state.selectedMoves,
+      lastMove: lastMove,
       status: BoardStatus.idle,
     ));
   }

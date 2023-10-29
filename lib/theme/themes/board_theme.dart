@@ -24,6 +24,8 @@ abstract class BoardTheme extends Equatable {
 
   Widget buildPieceMask(BuildContext context);
 
+  Widget buildMovePrint(BuildContext context, bool footprint);
+
   Alignment getAlignment(PiecePos pos);
 
   @override

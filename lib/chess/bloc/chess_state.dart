@@ -23,6 +23,7 @@ class ChessState extends Equatable {
     this.hintMoves,
     this.playEffect,
     this.playStatus,
+    this.lastMove,
   });
 
   /// 棋盘棋子状态
@@ -58,6 +59,9 @@ class ChessState extends Equatable {
   /// 棋局结果
   final PlayStatus? playStatus;
 
+  /// 保存上次动作, 用于提示
+  final MovePos? lastMove;
+
   // 时间相关
   // 开始时间
   // 总时间
@@ -90,6 +94,7 @@ class ChessState extends Equatable {
     BuiltList<MovePos>? hintMoves,
     PlayEffect? playEffect,
     PlayStatus? playStatus,
+    MovePos? lastMove,
   }) {
     return ChessState(
       board: board ?? this.board,
@@ -103,6 +108,7 @@ class ChessState extends Equatable {
       hintMoves: hintMoves ?? this.hintMoves,
       playEffect: playEffect,
       playStatus: playStatus ?? this.playStatus,
+      lastMove: lastMove ?? this.lastMove,
     );
   }
 }

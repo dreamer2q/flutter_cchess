@@ -144,7 +144,22 @@ class ChessView extends StatelessWidget {
                       previous.playStatus != current.playStatus;
                 },
                 listener: handleGameStatus,
-                child: ChessBoard(),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    BlocBuilder<ChessBloc, ChessState>(
+                      builder: (context, state) {
+                        final s = state.board.innerBoard.evaluate();
+                        return Container(
+                          child: Row(
+                            children: [Text('$s')],
+                          ),
+                        );
+                      },
+                    ),
+                    ChessBoard(),
+                  ],
+                ),
               ),
             ),
             ChessBoardMenu(),
@@ -193,6 +208,32 @@ class ChessBoard extends StatelessWidget {
                   },
                   child: Stack(
                     children: [
+                      /// last move
+                      if (state.lastMove != null) ...[
+                        Align(
+                          alignment: theme.getAlignment(state.lastMove!.srcPos),
+                          child: theme.buildMovePrint(context, true),
+                        ),
+                        Align(
+                          alignment: theme.getAlignment(state.lastMove!.dstPos),
+                          child: theme.buildMovePrint(context, false),
+                        ),
+                      ],
+
+                      if (state.animeMove != null)
+                        Align(
+                          alignment:
+                              theme.getAlignment(state.animeMove!.srcPos),
+                          child: theme.buildMovePrint(context, true),
+                        ),
+
+                      if (state.animeMoveInvalid != null)
+                        Align(
+                          alignment: theme
+                              .getAlignment(state.animeMoveInvalid!.srcPos),
+                          child: theme.buildMovePrint(context, true),
+                        ),
+
                       // chess
                       ...board.pcPairs.map((p) {
                         int sq = p.sq;
