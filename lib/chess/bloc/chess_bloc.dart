@@ -54,16 +54,16 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       ChessEventBoardTap event, Emitter<ChessState> emit) {
     if (state.status != BoardStatus.idle) return null;
 
-    ChessPiece? pc = state.board!.getPiece(event.pos.sq);
+    ChessPiece? pc = state.board.getPiece(event.pos.sq);
     // final piece = state.board?.get(event.pos);
     final selected = state.selected;
     if (pc != null) {
       if (selected == null || pc.sideTag == selected.piece.sideTag) {
-        if (state.board!.isSelectable(pc)) {
+        if (state.board.isSelectable(pc)) {
           emit(state.copyWith(
             selected: PiecePair(pc, event.pos),
             selectedMoves: BuiltList.of(
-              state.board!.getMoves(event.pos.sq),
+              state.board.getMoves(event.pos.sq),
             ),
           ));
         }
@@ -121,7 +121,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   FutureOr<void> _onPieceEndMoving(
       ChessEventMoveEnd event, Emitter<ChessState> emit) {
     MovePos? move = state.animeMove;
-    Board board = state.board!;
+    Board board = state.board;
     if (move != null) {
       board = board.copyWith(
         actions: board.actions.rebuild(
@@ -152,9 +152,9 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   FutureOr<void> _onChessUndoEvent(
       ChessEventUndo event, Emitter<ChessState> emit) async {
-    if (state.board!.lastMoves.length > 1 &&
-        state.board!.isTurn(state.playSide)) {
-      Board board = state.board!;
+    if (state.board.lastMoves.length > 1 &&
+        state.board.isTurn(state.playSide)) {
+      Board board = state.board;
       for (int i = 0; i < 2; i++) {
         final lastMove = board.actions.last as BoardMoveAction;
         board = Board(board.actions.rebuild((b) => b.removeLast()));
@@ -172,7 +172,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   FutureOr<void> _onChessGetHintMoves(
       ChessEventGetHint event, Emitter<ChessState> emit) {
-    if (state.board!.isTurn(state.playSide)) {
+    if (state.board.isTurn(state.playSide)) {
       _engine?.requestMove().then((mv) {
         add(
           ChessEventMoveBegin(

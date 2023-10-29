@@ -3,7 +3,6 @@ import 'package:flutter_cchess/helpers/helpers.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:built_collection/built_collection.dart';
-import 'package:flutter_cchess/utils/utils.dart';
 
 const initialFenString =
     'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';

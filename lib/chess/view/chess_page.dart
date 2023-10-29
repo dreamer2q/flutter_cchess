@@ -4,7 +4,6 @@ import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
 import 'package:flutter_cchess/chess/widget/chess_menu.dart';
-import 'package:flutter_cchess/main.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
