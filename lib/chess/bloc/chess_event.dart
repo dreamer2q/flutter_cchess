@@ -7,40 +7,41 @@ abstract class ChessEvent extends Equatable {
   List<Object> get props => [];
 }
 
-class ChessInitialized extends ChessEvent {
-  const ChessInitialized({
-    this.initialBoard,
+class ChessEventInitialized extends ChessEvent {
+  const ChessEventInitialized({
+    required this.initialBoard,
     this.playMode = PlayMode.withAI,
   });
 
-  final Board2? initialBoard;
+  final Board initialBoard;
   final PlayMode playMode;
+
+  @override
+  List<Object> get props => [initialBoard, playMode];
 }
 
-class ChessBoardTapped extends ChessEvent {
-  const ChessBoardTapped(this.position);
+class ChessEventBoardTap extends ChessEvent {
+  const ChessEventBoardTap(this.pos);
 
-  final PiecePosition position;
+  final PiecePos pos;
+
+  @override
+  List<Object> get props => [pos];
 }
 
-class PieceBeginMovingEvent extends ChessEvent {
-  const PieceBeginMovingEvent(this.piece, this.destination);
+class ChessEventMoveBegin extends ChessEvent {
+  const ChessEventMoveBegin(this.move);
 
-  final Piece piece;
-  final PiecePosition destination;
+  final MovePos move;
+
+  @override
+  List<Object> get props => [move];
 }
 
-class PieceEndMovingEvent extends ChessEvent {
-  const PieceEndMovingEvent();
+class ChessEventMoveEnd extends ChessEvent {
+  const ChessEventMoveEnd();
 }
 
-class PieceInvalidMoveBegin extends ChessEvent {
-  const PieceInvalidMoveBegin(this.piece, this.destination);
-
-  final Piece piece;
-  final PiecePosition destination;
-}
-
-class PieceInvalidMoveEnd extends ChessEvent {
-  const PieceInvalidMoveEnd();
+class ChessEventUndo extends ChessEvent {
+  const ChessEventUndo();
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
@@ -20,8 +21,8 @@ class ChessPage extends StatelessWidget {
         ),
         BlocProvider(
           create: (_) => ChessBloc()
-            ..add(ChessInitialized(
-              initialBoard: FenUtil.parse2(initialFenString),
+            ..add(ChessEventInitialized(
+              initialBoard: FenUtil.parse(initialFenString),
             )),
         ),
       ],
@@ -37,16 +38,57 @@ class ChessView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ChessView'),
+        title: const Text(
+          'ChessView',
+          style: TextStyle(color: Colors.green),
+        ),
+        shadowColor: Colors.transparent,
+        backgroundColor: Colors.transparent,
       ),
       body: Column(
         children: [
           Expanded(
             child: ChessBoard(),
           ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              TextButton(
+                child: Text('Restart'),
+                onPressed: () {},
+              ),
+              TextButton(
+                child: Text("Hint"),
+                onPressed: () {},
+              ),
+              BlocBuilder<ChessBloc, ChessState>(
+                builder: (context, state) => TextButton(
+                  onPressed: state.status != BoardStatus.idle
+                      ? null
+                      : () => context.read<ChessBloc>().add(ChessEventUndo()),
+                  child: Text('Undo'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
+  }
+}
+
+class MyColor extends MaterialStateColor {
+  const MyColor() : super(_defaultColor);
+
+  static const int _defaultColor = 0xcafefeed;
+  static const int _pressedColor = 0xdeadbeef;
+
+  @override
+  Color resolve(Set<MaterialState> states) {
+    if (states.contains(MaterialState.pressed)) {
+      return const Color(_pressedColor);
+    }
+    return const Color(_defaultColor);
   }
 }
 
@@ -81,22 +123,24 @@ class ChessBoard extends StatelessWidget {
                     final x = loc.dx ~/ theme.pieceSize;
                     final y = loc.dy ~/ theme.pieceSize;
                     debugPrint('tap: ${tap.localPosition}, {$x,$y}');
-                    final pos = PiecePosition(x, y);
-                    bloc.add(ChessBoardTapped(pos));
+                    bloc.add(ChessEventBoardTap(
+                      PiecePos(SquareBoard.coordXYFix(x, y)),
+                    ));
                   },
                   child: Stack(
                     children: [
                       // chess
-                      ...board!.pieces.map((p) {
-                        final pos = p.position;
-                        Widget child = theme.buildPiece(context, p);
+                      ...board!.pcPairs.map((p) {
+                        int sq = p.sq;
 
-                        if (state.animeMoveInvalid?.piece == p ||
-                            state.animeMove?.piece == p) {
+                        if (state.animeMoveInvalid?.sqSrc == sq ||
+                            state.animeMove?.sqSrc == sq) {
                           return const SizedBox();
                         }
 
-                        if (state.selected == p) {
+                        Widget child = theme.buildPiece(context, p.piece);
+
+                        if (state.selected?.sq == p.sq) {
                           child = DecoratedBox(
                             decoration: BoxDecoration(
                               boxShadow: const [
@@ -127,44 +171,51 @@ class ChessBoard extends StatelessWidget {
                         }
 
                         return Align(
-                          alignment: FractionalOffset(pos.x / 8, pos.y / 9),
+                          alignment: theme.getAlignment(p.pos),
                           child: child,
                         );
                       }).toList(),
 
                       /// available move actions
                       if (state.selectedMoves != null)
-                        ...state.selectedMoves!.map((pos) {
+                        ...state.selectedMoves!.map((mv) {
                           // TODO(@dreamer2q) 加入显示延迟过度动画
                           return Align(
-                            alignment: theme.getAlignment(pos),
-                            child: theme.buildPositionMask(context, pos),
+                            alignment: theme.getAlignment(mv.dstPos),
+                            child: theme.buildPieceMask(context),
                           );
                         }),
 
                       /// anime invalid move
                       if (state.animeMoveInvalid != null)
                         AnimatedInvalidMove(
-                          begin:
-                              theme.getAlignment(state.animeMoveInvalid!.src),
-                          end: theme.getAlignment(state.animeMoveInvalid!.dst),
+                          begin: theme
+                              .getAlignment(state.animeMoveInvalid!.srcPos),
+                          end: theme
+                              .getAlignment(state.animeMoveInvalid!.dstPos),
                           child: theme.buildPiece(
-                              context, state.animeMoveInvalid!.piece),
+                            context,
+                            state.board!
+                                .getPiece(state.animeMoveInvalid!.sqSrc)!,
+                          ),
                           onEnd: () => context
                               .read<ChessBloc>()
-                              .add(const PieceInvalidMoveEnd()),
+                              .add(const ChessEventMoveEnd()),
                         ),
 
                       /// anime move
-                      if (state.animeMove != null)
+                      if (state.animeMove != null &&
+                          state.board!.getPiece(state.animeMove!.sqSrc) != null)
                         AnimatedMove(
-                          begin: theme.getAlignment(state.animeMove!.src),
-                          end: theme.getAlignment(state.animeMove!.dst),
-                          child:
-                              theme.buildPiece(context, state.animeMove!.piece),
+                          begin: theme.getAlignment(state.animeMove!.srcPos),
+                          end: theme.getAlignment(state.animeMove!.dstPos),
+                          child: theme.buildPiece(
+                            context,
+                            state.board!.getPiece(state.animeMove!.sqSrc)!,
+                          ),
                           onEnd: () => context
                               .read<ChessBloc>()
-                              .add(const PieceEndMovingEvent()),
+                              .add(const ChessEventMoveEnd()),
                         ),
                     ],
                   ),

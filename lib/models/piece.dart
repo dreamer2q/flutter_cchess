@@ -1,4 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter_cchess/chess/game/game_board.dart';
+import 'package:flutter_cchess/utils/fen.dart';
 
 enum PieceKind {
   KING(0, 'k'),
@@ -58,6 +60,81 @@ class PieceMove extends Equatable {
 
   @override
   List<Object?> get props => [piece, dst];
+}
+
+class ChessPiece extends Equatable {
+  final int pc;
+
+  const ChessPiece(this.pc);
+
+  int get sideTag => SquareBoard.getSideTag(pc);
+  bool isRedSide() => sideTag == 1;
+
+  int get numTag => pc & 0x07;
+
+  @override
+  String toString() {
+    String side = isRedSide() ? 'r' : 'b';
+    String char = FenUtil.fenCharacterList[numTag];
+    return 'Piece($side$char)';
+  }
+
+  @override
+  List<Object?> get props => [pc];
+}
+
+class PiecePos extends Equatable {
+  final int sq;
+
+  const PiecePos(this.sq);
+
+  @override
+  String toString() {
+    int x = SquareBoard.getFileX(sq) - SquareBoard.FILE_LEFT,
+        y = SquareBoard.getRankY(sq) - SquareBoard.RANK_TOP;
+    return 'PiecePos($x, $y)';
+  }
+
+  @override
+  List<Object?> get props => [sq];
+}
+
+class PiecePair extends Equatable {
+  final ChessPiece piece;
+  final PiecePos pos;
+
+  int get pc => piece.pc;
+  int get sq => pos.sq;
+
+  const PiecePair(this.piece, this.pos);
+
+  factory PiecePair.pcsq(int pc, int sq) {
+    return PiecePair(
+      ChessPiece(pc),
+      PiecePos(sq),
+    );
+  }
+
+  @override
+  List<Object?> get props => [piece, pos];
+}
+
+class MovePos extends Equatable {
+  final int sqSrc;
+  final int sqDst;
+
+  int get mv => SquareBoard.getMove(sqSrc, sqDst);
+  PiecePos get srcPos => PiecePos(sqSrc);
+  PiecePos get dstPos => PiecePos(sqDst);
+
+  const MovePos(this.sqSrc, this.sqDst);
+
+  factory MovePos.mv(int mv) {
+    return MovePos(SquareBoard.getSrc(mv), SquareBoard.getDst(mv));
+  }
+
+  @override
+  List<Object?> get props => [sqSrc, sqDst];
 }
 
 class Piece extends Equatable {

@@ -17,11 +17,11 @@ abstract class BoardTheme extends Equatable {
 
   Widget buildBoard(BuildContext context);
 
-  Widget buildPiece(BuildContext context, Piece piece);
+  Widget buildPiece(BuildContext context, ChessPiece piece);
 
-  Widget buildPositionMask(BuildContext context, PiecePosition position);
+  Widget buildPieceMask(BuildContext context);
 
-  Alignment getAlignment(PiecePosition position);
+  Alignment getAlignment(PiecePos pos);
 
   @override
   List<Object?> get props => [boardSize, boardPadding, pieceSize, pieceAssets];

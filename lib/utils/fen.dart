@@ -1,13 +1,15 @@
+import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/helpers/helpers.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:flutter_cchess/utils/utils.dart';
 
 const initialFenString =
     'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
 
 abstract class FenUtil {
-  static Map<String, PieceKind> charToKind = {
+  static Map<String, PieceKind> fenCharMap = {
     'r': PieceKind.ROOK,
     'n': PieceKind.KNIGHT,
     'b': PieceKind.BISHOP,
@@ -17,74 +19,44 @@ abstract class FenUtil {
     'p': PieceKind.PAWN,
   };
 
+  static List<String> fenCharacterList = ['k', 'a', 'b', 'n', 'r', 'c', 'p'];
+
   static Board parse(String fenString) {
+    final List<BoardAction> actions = [];
+
     final parts = fenString.split(' ');
     final fenPos = parts.first;
-    final pieces = <Piece>[];
     if (fenPos.isNotEmpty) {
       final rows = fenPos.split('/');
       if (rows.length != 10) {
         throw Exception('rows.length != 10');
       }
       int i = 0;
-      for (final row in rows.reversed) {
-        row.split('').forEach((char) {
+      for (final String line in rows.reversed) {
+        for (final String char in line.split('')) {
           if (char.compareTo('0') >= 0 && char.compareTo('9') <= 0) {
-            final skipNum = int.tryParse(char) ?? 0;
-            i += skipNum;
+            final skip = int.tryParse(char) ?? 0;
+            i += skip;
           } else {
-            final kind = charToKind[char.toLowerCase()];
-            if (kind == null) {
+            int x = i % 9, y = i ~/ 9;
+            int sq = SquareBoard.coordXYFix(x, y);
+            int pc = fenCharacterList.indexOf(char.toLowerCase());
+            if (pc < 0) {
               throw Exception('invalid format: $char not recognizable');
             }
-            final side = char.isLowerCase() ? PieceSide.RED : PieceSide.BLACK;
-            final piece = Piece(kind, side, PiecePosition.fromIndex(i));
-            pieces.add(piece);
+            int sideTag = char.isLowerCase() ? 0x08 : 0x10;
+            pc |= sideTag;
+            actions.add(BoardPutAction(pc, sq));
             i++;
           }
-        });
+        }
       }
+
       // TODO: parse piece moves
     }
 
     return Board(
-      pieces: BuiltList.of(pieces),
-      moves: BuiltList(),
-    );
-  }
-
-  static Board2 parse2(String fenString) {
-    final parts = fenString.split(' ');
-    final fenPos = parts.first;
-    final pieces = <BoardAction>[];
-    if (fenPos.isNotEmpty) {
-      final rows = fenPos.split('/');
-      if (rows.length != 10) {
-        throw Exception('rows.length != 10');
-      }
-      int i = 0;
-      for (final row in rows.reversed) {
-        row.split('').forEach((char) {
-          if (char.compareTo('0') >= 0 && char.compareTo('9') <= 0) {
-            final skipNum = int.tryParse(char) ?? 0;
-            i += skipNum;
-          } else {
-            final kind = charToKind[char.toLowerCase()];
-            if (kind == null) {
-              throw Exception('invalid format: $char not recognizable');
-            }
-            final side = char.isLowerCase() ? PieceSide.RED : PieceSide.BLACK;
-            final piece = Piece(kind, side, PiecePosition.fromIndex(i));
-            pieces.add(PutPieceAction(piece));
-            i++;
-          }
-        });
-      }
-      // TODO: parse piece moves
-    }
-
-    return Board2(
-      actions: BuiltList.of(pieces),
+      BuiltList.of(actions),
     );
   }
 }

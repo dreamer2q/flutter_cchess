@@ -1,161 +1,96 @@
 import 'package:equatable/equatable.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
-import 'package:flutter_cchess/utils/utils.dart';
-import 'dart:collection';
 import 'models.dart';
 
 enum BoardSide { RedPlayer, BlackPlayer }
 
-abstract class BoardAction extends Equatable {}
-
-class PutPieceAction extends BoardAction {
-  final Piece piece;
-
-  PutPieceAction(this.piece);
-
-  @override
-  List<Object?> get props => [piece];
+abstract class BoardAction extends Equatable {
+  const BoardAction();
 }
 
-class MovePieceAction extends PutPieceAction {
-  final PiecePosition position;
+class BoardPutAction extends BoardAction {
+  final int pc;
+  final int sq;
 
-  MovePieceAction(super.piece, this.position);
+  const BoardPutAction(this.pc, this.sq);
 
   @override
-  List<Object?> get props => [...super.props, position];
+  List<Object?> get props => [pc, sq];
 }
 
-class Board2 extends Equatable {
-  // static calcPieces(List<BoardAction> actions) {
-  //   final List<Piece> board = [];
-  //   for (final action in actions) {
-  //     if (action is PutPieceAction) {
-  //       board.removeWhere((p) => p.position == action.piece.position);
-  //       board.add(action.piece);
-  //     } else if (action is MovePieceAction) {
-  //       board.removeWhere((p) =>
-  //           p.position == action.piece.position ||
-  //           p.position == action.position);
-  //       board.add(action.piece.copyWith(position: action.position));
-  //     }
-  //   }
-  //   return board;
-  // }
+class BoardMoveAction extends BoardAction {
+  final int mv;
 
-  Board2({
-    required this.actions,
-  }) : innerBoard = GameBoard() {
-    for (final ac in actions) {
-      if (ac is MovePieceAction) {
-        innerBoard.makeMove(
-          GameBoard.getMove(ac.piece.sq, ac.position.sq),
-        );
-      } else if (ac is PutPieceAction) {
-        innerBoard.addPiece(ac.piece.sq, ac.piece.pc);
-      }
-    }
-  }
-
-  final BuiltList<BoardAction> actions;
-  final GameBoard innerBoard;
-
-  List<Piece> get pieces {
-    final List<Piece> board = [];
-    for (int sq = 0; sq < 256; sq++) {
-      final int pc = innerBoard.ucpcSquares[sq];
-      if (pc != 0) {
-        final Piece piece = BoardUtil.makePiece(sq, pc);
-        board.add(piece);
-      }
-    }
-    return board;
-  }
-
-  Piece? get(PiecePosition position) {
-    final int i = pieces.indexWhere((p) => p.position == position);
-    if (i != -1) {
-      return pieces[i];
-    }
-    return null;
-  }
-
-  List<PieceMove> get moves => actions
-      .whereType<MovePieceAction>()
-      .map((e) => PieceMove(e.piece, e.position))
-      .toList();
-
-  BoardSide get currentPlayer =>
-      moves.length.isOdd ? BoardSide.BlackPlayer : BoardSide.RedPlayer;
-
-  Board2 nextAction(BoardAction action) {
-    return Board2(
-      actions: actions.rebuild(
-        (b) => b..add(action),
-      ),
-    );
-  }
+  const BoardMoveAction(this.mv);
 
   @override
-  String toString() => 'Board{pieces: $pieces}';
-
-  @override
-  List<Object?> get props => [...actions];
+  List<Object?> get props => [mv];
 }
 
 class Board extends Equatable {
-  const Board({
-    required this.pieces,
-    required this.moves,
-  });
-
-  final BuiltList<Piece> pieces;
-  final BuiltList<PieceMove> moves;
-
-  BoardSide get currentPlayer =>
-      moves.length.isOdd ? BoardSide.BlackPlayer : BoardSide.RedPlayer;
-
-  Piece? get(PiecePosition position) {
-    return pieces.firstWhere((p) => p.position == position);
+  Board(this.actions) : innerBoard = SquareBoard() {
+    for (final ac in actions) {
+      if (ac is BoardPutAction) {
+        innerBoard.addPiece(ac.sq, ac.pc);
+      } else if (ac is BoardMoveAction) {
+        innerBoard.makeMove(ac.mv);
+      }
+    }
   }
 
-  Board toBeginMoving(Piece piece) {
-    return copyWith(
-      pieces: pieces.rebuild(
-        (p) => p..remove(piece),
-      ),
-    );
+  final SquareBoard innerBoard;
+
+  final BuiltList<BoardAction> actions;
+
+  List<PiecePair> get pcPairs {
+    final List<PiecePair> pairs = [];
+    for (int sq = 0; sq < 256; sq++) {
+      final int pc = innerBoard.ucpcSquares[sq];
+      if (pc != 0) {
+        pairs.add(PiecePair(
+          ChessPiece(pc),
+          PiecePos(sq),
+        ));
+      }
+    }
+    return pairs;
   }
 
-  Board toEndMoving(PieceMove move) {
-    return copyWith(
-      pieces: pieces.rebuild(
-        (p) => p
-          ..remove(get(move.dst))
-          ..add(move.dstPiece),
-      ),
-      moves: _addMove(move),
-    );
+  List<MovePos> getMoves([int sq = 0]) {
+    List<int> mvs = [];
+    innerBoard.generateMoves(mvs);
+    if (sq != 0) {
+      mvs.removeWhere((mv) => sq != SquareBoard.getSrc(mv));
+    }
+    return mvs.map((mv) => MovePos.mv(mv)).toList();
   }
 
-  BuiltList<PieceMove> _addMove(PieceMove move) {
-    return moves.rebuild((b) => b.add(move));
+  bool isMovable(MovePos move) {
+    return getMoves(move.sqSrc).contains(move);
   }
 
-  @override
-  List<Object?> get props => [pieces, moves];
+  ChessPiece? getPiece(int sq) {
+    int pc = innerBoard.ucpcSquares[sq];
+    return pc == 0 ? null : ChessPiece(pc);
+  }
 
-  @override
-  String toString() => 'Board{pieces: $pieces, moves: $moves}';
+  bool isSelectable(ChessPiece pc) {
+    return innerBoard.sdPlayer != pc.sideTag;
+  }
 
   Board copyWith({
-    BuiltList<Piece>? pieces,
-    BuiltList<PieceMove>? moves,
+    BuiltList<BoardAction>? actions,
   }) {
-    return Board(
-      pieces: pieces ?? this.pieces,
-      moves: moves ?? this.moves,
-    );
+    return Board(actions ?? this.actions);
+  }
+
+  @override
+  List<Object?> get props => [actions];
+
+  // 轮到我走
+  bool isTurn(PlaySide playSide) {
+    return innerBoard.sdPlayer == playSide.index;
   }
 }

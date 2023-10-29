@@ -13,7 +13,7 @@ class ChessGame {
   }
 
   final ChessEngine _engine = ChessEngine();
-  final GameBoard _delegate = GameBoard();
+  final SquareBoard _delegate = SquareBoard();
 
   List<PieceMove> _validMoves = [];
   List<PieceMove> get validMoves => _validMoves;
@@ -51,8 +51,8 @@ class ChessGame {
     final List<int> mvs = [];
     _delegate.generateMoves(mvs);
     _validMoves = mvs.map((mv) {
-      final int srcSq = GameBoard.getSrc(mv);
-      final int dstSq = GameBoard.getDst(mv);
+      final int srcSq = SquareBoard.getSrc(mv);
+      final int dstSq = SquareBoard.getDst(mv);
       final dstPos = BoardUtil.makePosition(dstSq);
       final srcPc = _delegate.ucpcSquares[srcSq];
       final Piece piece = BoardUtil.makePiece(srcSq, srcPc);
@@ -61,7 +61,7 @@ class ChessGame {
   }
 
   bool isSelectable(Piece selected) {
-    final int sideTag = GameBoard.isSideTag(_delegate.sdPlayer);
+    final int sideTag = SquareBoard.isSideTag(_delegate.sdPlayer);
     return selected.side.code == sideTag;
   }
 }

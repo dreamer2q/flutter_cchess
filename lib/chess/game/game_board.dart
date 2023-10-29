@@ -1,7 +1,7 @@
 /// xiangqi Witch Light
 ///
 /// 局面结构
-class GameBoard {
+class SquareBoard {
   /// 棋盘范围
   static const int RANK_TOP = 3;
   static const int RANK_BOTTOM = 12;
@@ -343,6 +343,10 @@ class GameBoard {
     return x + (y << 4);
   }
 
+  static int coordXYFix(int x, int y) {
+    return coordXY(x + FILE_LEFT, y + RANK_TOP);
+  }
+
   /// 翻转格子
   static int getSquareFlip(int sq) {
     return 254 - sq;
@@ -424,6 +428,11 @@ class GameBoard {
     return (pc >> 3) & 0x01;
   }
 
+  /// 是否同一阵营
+  static bool isSameTag(int pc1, int pc2) {
+    return getSideTag(pc1) == getSideTag(pc2);
+  }
+
   /// 获得红黑标记(红子是8，黑子是16)
   static int isSideTag(int sd) {
     return 8 + (sd << 3);
@@ -462,7 +471,7 @@ class GameBoard {
   int vlBlack = 0; // 红、黑双方的子力价值
   int nDistance = 0; // 距离根节点的步数
 
-  GameBoard() {
+  SquareBoard() {
     reset();
   }
 

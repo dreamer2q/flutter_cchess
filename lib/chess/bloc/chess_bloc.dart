@@ -2,33 +2,31 @@ import 'dart:async';
 
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_cchess/chess/game/game.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/models/piece.dart';
-import 'package:flutter_cchess/utils/utils.dart';
+import 'package:built_collection/built_collection.dart';
 
 part 'chess_event.dart';
 part 'chess_state.dart';
 
 class ChessBloc extends Bloc<ChessEvent, ChessState> {
-  ChessBloc() : super(ChessState()) {
-    on<ChessInitialized>(_onInitialized);
-    on<ChessBoardTapped>(_onBoardTapped);
-    on<PieceBeginMovingEvent>(_onPieceBeginMoving);
-    on<PieceEndMovingEvent>(_onPieceEndMoving);
-    on<PieceInvalidMoveBegin>(_onPieceInvalidMoveBegin);
-    on<PieceInvalidMoveEnd>(_onPieceInvalidMoveEnd);
+  ChessBloc()
+      : super(ChessState(
+          board: Board(BuiltList.of([])),
+        )) {
+    on<ChessEventInitialized>(_onInitialized);
+    on<ChessEventBoardTap>(_onBoardTapped);
+    on<ChessEventMoveBegin>(_onPieceBeginMoving);
+    on<ChessEventMoveEnd>(_onPieceEndMoving);
+    on<ChessEventUndo>(_onChessUndoEvent);
   }
 
-  final ChessGame _game = ChessGame();
   ChessEngine? _engine;
 
   FutureOr<void> _onInitialized(
-      ChessInitialized event, Emitter<ChessState> emit) {
-    _game.resetBoard(initialPieces: event.initialBoard?.pieces.toList());
-    _game.prepareMoves();
+      ChessEventInitialized event, Emitter<ChessState> emit) {
     switch (event.playMode) {
       case PlayMode.withAI:
         _engine = ChessEngine();
@@ -48,90 +46,90 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   }
 
   FutureOr<void> _onBoardTapped(
-      ChessBoardTapped event, Emitter<ChessState> emit) {
+      ChessEventBoardTap event, Emitter<ChessState> emit) {
     if (state.status != BoardStatus.idle) return null;
 
-    final piece = state.board?.get(event.position);
+    ChessPiece? pc = state.board!.getPiece(event.pos.sq);
+    // final piece = state.board?.get(event.pos);
     final selected = state.selected;
-
-    if (piece != null) {
-      if (selected == null || selected.isSameSide(piece)) {
-        if (_game.isSelectable(piece)) {
+    if (pc != null) {
+      if (selected == null || pc.sideTag == selected.piece.sideTag) {
+        if (state.board!.isSelectable(pc)) {
           emit(state.copyWith(
-            selected: piece,
-            selectedMoves: _game.getPieceMoves(piece),
+            selected: PiecePair(pc, event.pos),
+            selectedMoves: BuiltList.of(
+              state.board!.getMoves(event.pos.sq),
+            ),
           ));
         }
       } else {
-        // move & eat
-        add(PieceBeginMovingEvent(selected, event.position));
+        // 吃子
+        add(ChessEventMoveBegin(MovePos(selected.sq, event.pos.sq)));
       }
     } else if (selected != null) {
-      // move
-      add(PieceBeginMovingEvent(selected, event.position));
+      // 走子
+      add(ChessEventMoveBegin(MovePos(selected.sq, event.pos.sq)));
     }
   }
 
   FutureOr<void> _onPieceBeginMoving(
-      PieceBeginMovingEvent event, Emitter<ChessState> emit) {
-    if (_game.makeMove(event.piece.position, event.destination)) {
-      emit(
-        state.copyWith(
-          animeMove: PieceMove(event.piece, event.destination),
-          status: BoardStatus.busy,
-        ),
-      );
-    } else {
-      add(PieceInvalidMoveBegin(event.piece, event.destination));
-    }
+      ChessEventMoveBegin event, Emitter<ChessState> emit) {
+    bool isMovable = state.board!.isMovable(event.move);
+    emit(state.copyWith(
+      animeMove: isMovable ? event.move : null,
+      animeMoveInvalid: isMovable ? null : event.move,
+      status: BoardStatus.busy,
+    ));
   }
 
   FutureOr<void> _onPieceEndMoving(
-      PieceEndMovingEvent event, Emitter<ChessState> emit) {
-    if (state.status == BoardStatus.busy) {
-      _game.prepareMoves();
-      final move = state.animeMove!;
-      emit(
-        state.copyWith(
-          board: state.board!.nextAction(
-            MovePieceAction(move.piece, move.dst),
-          ),
-          status: BoardStatus.idle,
+      ChessEventMoveEnd event, Emitter<ChessState> emit) {
+    MovePos? move = state.animeMove;
+    Board board = state.board!;
+    if (move != null) {
+      board = board.copyWith(
+        actions: board.actions.rebuild(
+          (b) => b..add(BoardMoveAction(move.mv)),
         ),
       );
-      if (_engine != null) {
-        if (state.board!.currentPlayer == BoardSide.BlackPlayer) {
-          _engine?.resultForMove(move).then((move) {
-            int sqSrc = GameBoard.getSrc(move);
-            int sqDst = GameBoard.getDst(move);
-            Piece originPiece =
-                state.board!.get(BoardUtil.makePosition(sqSrc))!;
-            add(PieceBeginMovingEvent(
-                originPiece, BoardUtil.makePosition(sqDst)));
-          });
-        }
+
+      if (_engine != null && !board.isTurn(state.playSide)) {
+        _engine?.requestMove(move.mv).then(
+              (mv) => add(
+                ChessEventMoveBegin(MovePos.mv(mv)),
+              ),
+            );
       }
     }
+
+    emit(state.copyWith(
+      board: board,
+      animeMove: null,
+      animeMoveInvalid: null,
+      selected: move != null ? null : state.selected,
+      selectedMoves: move != null ? BuiltList.of([]) : state.selectedMoves,
+      status: BoardStatus.idle,
+    ));
   }
 
-  FutureOr<void> _onPieceInvalidMoveBegin(
-      PieceInvalidMoveBegin event, Emitter<ChessState> emit) {
-    final move = PieceMove(event.piece, event.destination);
-    emit(
-      state.copyWith(
-        selectedMoves: state.selectedMoves,
-        animeMoveInvalid: move,
-      ),
-    );
-  }
+  FutureOr<void> _onChessUndoEvent(
+      ChessEventUndo event, Emitter<ChessState> emit) async {
+    // if (state.board!.historyMoves.isNotEmpty &&
+    //     state.board!.currentPlayer == BoardSide.RedPlayer) {
+    //   Board2 board = state.board!;
+    //   for (int i = 0; i < 2; i++) {
+    //     final lastMove = board.historyMoves.last;
+    //     board = board.prevState();
+    //     Piece? p = board.get(lastMove.dst);
+    //     int mv = BoardUtil.calcMove(lastMove.src, lastMove.dst);
+    //     await _engine?.requestUndo(mv, p == null ? 0 : p.pc);
+    //   }
 
-  FutureOr<void> _onPieceInvalidMoveEnd(
-      PieceInvalidMoveEnd event, Emitter<ChessState> emit) {
-    emit(
-      state.copyWith(
-        selected: state.animeMoveInvalid!.piece,
-        selectedMoves: state.selectedMoves,
-      ),
-    );
+    //   emit(
+    //     state.copyWith(
+    //       board: board,
+    //     ),
+    //   );
+    // } else {}
   }
 }

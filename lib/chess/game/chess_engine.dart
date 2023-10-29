@@ -73,35 +73,44 @@ class ChessEngine {
     final XqwlSearch search = XqwlSearch();
     final ReceivePort recvPort = ReceivePort();
 
+    dynamic methodHandler(String method, dynamic params) {
+      switch (method) {
+        case 'board.requestMove':
+          search.searchMain();
+          return search.mvResult;
+        case 'board.makeMove':
+          final int mv = params;
+          if (!search.pos.legalMove(mv)) {
+            throw Exception('illegal move: $mv');
+          }
+          if (!search.pos.makeMove(mv)) {
+            throw Exception('king is checked');
+          }
+          search.searchMain();
+          search.pos.makeMove(search.mvResult);
+          return search.mvResult;
+        case 'board.reset':
+          search.pos.startup();
+          break;
+        case 'board.undoMove':
+          int mv = params[0];
+          int pc = params[1];
+          search.pos.undoMakeMove(mv, pc);
+          break;
+        default:
+          throw Exception('unsupported method: $method');
+      }
+      return null;
+    }
+
     recvPort.listen((message) {
       if (message is _Request) {
         final _Request e = message;
-        switch (e.method) {
-          case 'board.requestMove':
-            search.searchMain();
-            sendPort.send(e.makeResult(search.mvResult));
-            break;
-          case 'board.makeMove':
-            final int mv = e.params;
-            if (!search.pos.legalMove(mv)) {
-              sendPort.send(e.makeError(Exception('illegal move: $mv')));
-              break;
-            }
-            if (!search.pos.makeMove(mv)) {
-              sendPort.send(e.makeError(Exception('king is checked')));
-              break;
-            }
-            search.searchMain();
-            search.pos.makeMove(search.mvResult);
-            sendPort.send(e.makeResult(search.mvResult));
-            break;
-          case 'board.reset':
-            search.pos.startup();
-            sendPort.send(e.makeResult(true));
-            break;
-          case 'board.undoMove':
-            sendPort.send(e.makeError(UnimplementedError()));
-            break;
+        try {
+          final result = methodHandler(e.method, e.params);
+          sendPort.send(e.makeResult(result));
+        } catch (err) {
+          sendPort.send(e.makeError(err));
         }
       }
     });
@@ -163,10 +172,11 @@ class ChessEngine {
     return pendingRes.future;
   }
 
-  Future<int> resultForMove(PieceMove move) async {
-    final mv = BoardUtil.calcMove(move.src, move.dst);
-    final res = await invokeMethod('board.makeMove', mv);
-    // PieceMove(piece, dst)
-    return res as int;
+  Future<int> requestMove(int mv) async {
+    return await invokeMethod('board.makeMove', mv);
+  }
+
+  Future requestUndo(int mv, int pc) async {
+    return await invokeMethod('board.undoMove', [mv, pc]);
   }
 }

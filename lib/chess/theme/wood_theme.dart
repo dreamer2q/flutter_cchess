@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/models/piece.dart';
 
 import 'package:flutter_cchess/theme/themes/board_theme.dart';
+import 'package:flutter_cchess/utils/utils.dart';
 
 class WoodsBoardTheme extends BoardTheme {
   const WoodsBoardTheme();
@@ -30,13 +32,15 @@ class WoodsBoardTheme extends BoardTheme {
   }
 
   @override
-  Widget buildPiece(BuildContext context, Piece piece) {
-    final png = piece.side.char + piece.kind.char;
+  Widget buildPiece(BuildContext context, ChessPiece piece) {
+    String side = piece.isRedSide() ? 'r' : 'b';
+    String char = FenUtil.fenCharacterList[piece.numTag];
+    String png = side + char;
     return Image.asset('assets/skins/woods/$png.png');
   }
 
   @override
-  Widget buildPositionMask(BuildContext context, PiecePosition position) {
+  Widget buildPieceMask(BuildContext context) {
     return Container(
       width: pieceSize,
       height: pieceSize,
@@ -52,10 +56,9 @@ class WoodsBoardTheme extends BoardTheme {
   }
 
   @override
-  Alignment getAlignment(PiecePosition position) {
-    return FractionalOffset(
-      position.x / 8,
-      position.y / 9,
-    );
+  Alignment getAlignment(PiecePos pos) {
+    int x = SquareBoard.getFileX(pos.sq) - SquareBoard.FILE_LEFT,
+        y = SquareBoard.getRankY(pos.sq) - SquareBoard.RANK_TOP;
+    return FractionalOffset(x / 8, y / 9);
   }
 }

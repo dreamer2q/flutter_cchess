@@ -2,7 +2,7 @@ import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/models/piece.dart';
 
 extension PiecePositionEx on PiecePosition {
-  int get sq => (GameBoard.RANK_TOP + y) * 16 + (GameBoard.FILE_LEFT + x);
+  int get sq => (SquareBoard.RANK_TOP + y) * 16 + (SquareBoard.FILE_LEFT + x);
 }
 
 extension PieceEx on Piece {
@@ -16,14 +16,14 @@ abstract class BoardUtil {
   }
 
   static PiecePosition makePosition(int sq) {
-    final x = GameBoard.getFileX(sq) - GameBoard.FILE_LEFT;
-    final y = GameBoard.getRankY(sq) - GameBoard.RANK_TOP;
+    final x = SquareBoard.getFileX(sq) - SquareBoard.FILE_LEFT;
+    final y = SquareBoard.getRankY(sq) - SquareBoard.RANK_TOP;
     return PiecePosition(x, y);
   }
 
   static Piece makePiece(int sq, int pc) {
     final PieceSide side =
-        GameBoard.getSideTag(pc) == 1 ? PieceSide.RED : PieceSide.BLACK;
+        SquareBoard.getSideTag(pc) == 1 ? PieceSide.RED : PieceSide.BLACK;
     final PieceKind kind = PieceKind.values[pc & 0x07];
     final PiecePosition position = makePosition(sq);
     return Piece(kind, side, position);
