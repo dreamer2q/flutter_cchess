@@ -45,3 +45,7 @@ class ChessEventMoveEnd extends ChessEvent {
 class ChessEventUndo extends ChessEvent {
   const ChessEventUndo();
 }
+
+class ChessEventGetHint extends ChessEvent {
+  const ChessEventGetHint();
+}

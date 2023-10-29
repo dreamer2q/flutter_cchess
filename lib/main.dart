@@ -206,7 +206,6 @@ class _ChessState extends State<Chess> {
     ]);
 
     return Column(
-      // mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Expanded(
           child: FittedBox(

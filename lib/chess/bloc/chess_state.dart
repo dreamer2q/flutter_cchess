@@ -16,6 +16,7 @@ class ChessState extends Equatable {
     this.status = BoardStatus.busy,
     this.playMode = PlayMode.withAI,
     this.playSide = PlaySide.red,
+    this.hintMoves,
   });
 
   /// 棋盘棋子状态
@@ -39,7 +40,10 @@ class ChessState extends Equatable {
   /// 当前运行模式
   final PlayMode playMode;
 
+  /// 玩家选择的阵营(默认red)
   final PlaySide playSide;
+
+  final BuiltList<MovePos>? hintMoves;
 
   @override
   List<Object?> get props => [
@@ -51,6 +55,7 @@ class ChessState extends Equatable {
         status,
         playMode,
         playSide,
+        hintMoves,
       ];
 
   ChessState copyWith({
@@ -62,6 +67,7 @@ class ChessState extends Equatable {
     BoardStatus? status,
     PlayMode? playMode,
     PlaySide? playSide,
+    BuiltList<MovePos>? hintMoves,
   }) {
     return ChessState(
       board: board ?? this.board,
@@ -72,6 +78,7 @@ class ChessState extends Equatable {
       status: status ?? this.status,
       playMode: playMode ?? this.playMode,
       playSide: playSide ?? this.playSide,
+      hintMoves: hintMoves ?? this.hintMoves,
     );
   }
 }

@@ -172,8 +172,12 @@ class ChessEngine {
     return pendingRes.future;
   }
 
-  Future<int> requestMove(int mv) async {
+  Future<int> makeMove(int mv) async {
     return await invokeMethod('board.makeMove', mv);
+  }
+
+  Future<int> requestMove() async {
+    return await invokeMethod('board.requestMove', null);
   }
 
   Future requestUndo(int mv, int pc) async {

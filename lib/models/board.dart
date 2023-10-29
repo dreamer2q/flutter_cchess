@@ -58,6 +58,11 @@ class Board extends Equatable {
     return pairs;
   }
 
+  BuiltList<MovePos> get lastMoves => actions
+      .whereType<BoardMoveAction>()
+      .map<MovePos>((v) => MovePos.mv(v.mv))
+      .toBuiltList();
+
   List<MovePos> getMoves([int sq = 0]) {
     List<int> mvs = [];
     innerBoard.generateMoves(mvs);

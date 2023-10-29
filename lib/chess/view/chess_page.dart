@@ -59,13 +59,15 @@ class ChessView extends StatelessWidget {
               ),
               TextButton(
                 child: Text("Hint"),
-                onPressed: () {},
+                onPressed: () {
+                  context.read<ChessBloc>().add(ChessEventGetHint());
+                },
               ),
               BlocBuilder<ChessBloc, ChessState>(
                 builder: (context, state) => TextButton(
-                  onPressed: state.status != BoardStatus.idle
-                      ? null
-                      : () => context.read<ChessBloc>().add(ChessEventUndo()),
+                  onPressed: state.board!.lastMoves.length > 1
+                      ? () => context.read<ChessBloc>().add(ChessEventUndo())
+                      : null,
                   child: Text('Undo'),
                 ),
               ),
@@ -217,6 +219,9 @@ class ChessBoard extends StatelessWidget {
                               .read<ChessBloc>()
                               .add(const ChessEventMoveEnd()),
                         ),
+
+                      /// hints
+                      ///
                     ],
                   ),
                 ),
