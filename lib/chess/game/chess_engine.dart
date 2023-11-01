@@ -69,7 +69,7 @@ class ChessEngine {
         case 'board.undoMove':
           int mv = params[0];
           int pc = params[1];
-          search.pos.undoMakeMove(mv, pc);
+          search.pos.undoMakeMove();
           break;
         default:
           throw Exception('unsupported method: $method');

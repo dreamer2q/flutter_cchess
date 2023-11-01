@@ -1,3 +1,5 @@
+import 'package:flutter_cchess/engine/xqlite/struct.dart';
+
 /// xiangqi Witch Light
 /// 局面结构
 class XqwlPosition {
@@ -18,11 +20,22 @@ class XqwlPosition {
 
   /// 其他常数
   static const int MAX_GEN_MOVES = 128; // 最大的生成走法数
-  static const int LIMIT_DEPTH = 32; // 最大的搜索深度
+  static const MAX_MOVES = 256; // 最大的历史走法数
+  static const int LIMIT_DEPTH = 64; // 最大的搜索深度
   static const int MATE_VALUE = 10000; // 最高分值，即将死的分值
   // 搜索出胜负的分值界限，超出此值就说明已经搜索出杀棋了
-  static const int WIN_VALUE = MATE_VALUE - 100;
+  static const int BAN_VALUE = MATE_VALUE - 100; // 长将判负的分值，低于该值将不写入置换表
+  static const int WIN_VALUE = MATE_VALUE - 200; // 搜索出胜负的分值界限，超出此值就说明已经搜索出杀棋了
+  static const int DRAW_VALUE = 20; // 和棋时返回的分数(取负值)
   static const int ADVANCED_VALUE = 3; // 先行权分值
+  static const int RANDOM_MASK = 7; // 随机性分值
+  static const int NULL_MARGIN = 400; // 空步裁剪的子力边界
+  static const int NULL_DEPTH = 2; // 空步裁剪的裁剪深度
+  static const int HASH_SIZE = 1 << 20; // 置换表大小
+  static const int HASH_ALPHA = 1; // ALPHA节点的置换表项
+  static const int HASH_BETA = 2; // BETA节点的置换表项
+  static const int HASH_PV = 3; // PV节点的置换表项
+  static const int BOOK_SIZE = 16384; // 开局库大小
 
   /// 判断棋子是否在棋盘中的数组
   static const ccInBoard /* [256] */ = [
@@ -452,27 +465,45 @@ class XqwlPosition {
   int vlWhite = 0;
   int vlBlack = 0; // 红、黑双方的子力价值
   int nDistance = 0; // 距离根节点的步数
+  int nMoveNum = 0; // 距离根节点的步数，历史走法数
+  List<MoveStruct> mvsList =
+      List.generate(MAX_MOVES, (_) => MoveStruct()); // 历史走法信息列表
+  ZobristStruct zobr = ZobristStruct.initZero(); // Zobrist
+  Zobrist zobrist = Zobrist.initZobrist();
 
   XqwlPosition() {
     startup();
   }
 
+  void clearBoard() {
+    sdPlayer = vlWhite = vlBlack = nDistance = 0;
+    ucpcSquares.fillRange(0, ucpcSquares.length, 0);
+    zobr = ZobristStruct.initZero();
+  }
+
+  /// 清空(初始化)历史走法信息
+  void setIrrev() {
+    mvsList[0].set(0, 0, checked(), zobr.dwKey);
+    nMoveNum = 1;
+  }
+
   /// 初始化棋盘
   void startup() {
     int sq, pc;
-    sdPlayer = vlWhite = vlBlack = nDistance = 0;
-    ucpcSquares.fillRange(0, ucpcSquares.length, 0);
+    clearBoard();
     for (sq = 0; sq < 256; sq++) {
       pc = cucpcStartup[sq];
       if (pc != 0) {
         addPiece(sq, pc);
       }
     }
+    setIrrev();
   }
 
   /// 交换走子方
   void changeSide() {
     sdPlayer = 1 - sdPlayer;
+    zobr.xor(zobrist.player);
   }
 
   /// 在棋盘上放一枚棋子
@@ -481,8 +512,10 @@ class XqwlPosition {
     // 红方加分，黑方(注意"cucvlPiecePos"取值要颠倒)减分
     if (pc < 16) {
       vlWhite += cucvlPiecePos[pc - 8][sq];
+      zobr.xor(zobrist.table[pc - 8][sq]);
     } else {
       vlBlack += cucvlPiecePos[pc - 16][getSquareFlip(sq)];
+      zobr.xor(zobrist.table[pc - 9][sq]);
     }
   }
 
@@ -492,8 +525,10 @@ class XqwlPosition {
     // 红方减分，黑方(注意"cucvlPiecePos"取值要颠倒)加分
     if (pc < 16) {
       vlWhite -= cucvlPiecePos[pc - 8][sq];
+      zobr.xor(zobrist.table[pc - 8][sq]);
     } else {
       vlBlack -= cucvlPiecePos[pc - 16][getSquareFlip(sq)];
+      zobr.xor(zobrist.table[pc - 9][sq]);
     }
   }
 
@@ -501,6 +536,16 @@ class XqwlPosition {
   int evaluate() {
     return (sdPlayer == 0 ? vlWhite - vlBlack : vlBlack - vlWhite) +
         ADVANCED_VALUE;
+  }
+
+  bool inCheck() {
+    // 是否被将军
+    return mvsList[nMoveNum - 1].ucbCheck;
+  }
+
+  bool captured() {
+    // 上一步是否吃子
+    return mvsList[nMoveNum - 1].ucpcCaptured != 0;
   }
 
   // 搬一步棋的棋子
@@ -531,32 +576,53 @@ class XqwlPosition {
     }
   }
 
-  int moveCaptured(int mv) {
-    int dst = getDst(mv);
-    return ucpcSquares[dst];
-  }
-
   /// 走一步棋
   bool makeMove(int mv) {
+    int dwKey = zobr.dwKey;
     int pcCaptured = movePiece(mv);
     if (checked()) {
       undoMovePiece(mv, pcCaptured);
       return false;
     }
     changeSide();
+    mvsList[nMoveNum].set(mv, pcCaptured, checked(), dwKey);
+    nMoveNum++;
     nDistance++;
     return true;
   }
 
   /// 撤消走一步棋
-  void undoMakeMove(int mv, int pcCaptured) {
+  void undoMakeMove() {
     nDistance--;
+    nMoveNum--;
     changeSide();
-    undoMovePiece(mv, pcCaptured);
+    undoMovePiece(mvsList[nMoveNum].wmv, mvsList[nMoveNum].ucpcCaptured);
   }
 
-  /// 生成所有走法
-  int generateMoves(List<int> mvs) {
+  /// 走一步空步
+  void nullMove() {
+    int dwKey;
+    dwKey = zobr.dwKey;
+    changeSide();
+    mvsList[nMoveNum].set(0, 0, false, dwKey);
+    nMoveNum++;
+    nDistance++;
+  }
+
+  /// 撤消走一步空步
+  void undoNullMove() {
+    nDistance--;
+    nMoveNum--;
+    changeSide();
+  }
+
+  int moveCaptured(int mv) {
+    int dst = getDst(mv);
+    return ucpcSquares[dst];
+  }
+
+  /// 生成所有走法, 如果"bCapture"为"TRUE"则只生成吃子走法
+  int generateMoves(List<int> mvs, [bool bCapture = false]) {
     /// *移除最大生成步数, 方便后续排序
     mvs.clear();
     void addMove(int src, int dst) {
@@ -586,7 +652,9 @@ class XqwlPosition {
               continue;
             }
             pcDst = ucpcSquares[sqDst];
-            if ((pcDst & pcSelfSide) == 0) {
+            if (bCapture
+                ? (pcDst & pcOppSide) != 0
+                : (pcDst & pcSelfSide) == 0) {
               addMove(sqSrc, sqDst);
             }
           }
@@ -598,7 +666,9 @@ class XqwlPosition {
               continue;
             }
             pcDst = ucpcSquares[sqDst];
-            if ((pcDst & pcSelfSide) == 0) {
+            if (bCapture
+                ? (pcDst & pcOppSide) != 0
+                : (pcDst & pcSelfSide) == 0) {
               addMove(sqSrc, sqDst);
             }
           }
@@ -613,7 +683,9 @@ class XqwlPosition {
             }
             sqDst += ccAdvisorDelta[i];
             pcDst = ucpcSquares[sqDst];
-            if ((pcDst & pcSelfSide) == 0) {
+            if (bCapture
+                ? (pcDst & pcOppSide) != 0
+                : (pcDst & pcSelfSide) == 0) {
               addMove(sqSrc, sqDst);
             }
           }
@@ -630,7 +702,9 @@ class XqwlPosition {
                 continue;
               }
               pcDst = ucpcSquares[sqDst];
-              if ((pcDst & pcSelfSide) == 0) {
+              if (bCapture
+                  ? (pcDst & pcOppSide) != 0
+                  : (pcDst & pcSelfSide) == 0) {
                 addMove(sqSrc, sqDst);
               }
             }
@@ -643,7 +717,9 @@ class XqwlPosition {
             while (isInBoard(sqDst)) {
               pcDst = ucpcSquares[sqDst];
               if (pcDst == 0) {
-                addMove(sqSrc, sqDst);
+                if (!bCapture) {
+                  addMove(sqSrc, sqDst);
+                }
               } else {
                 if ((pcDst & pcOppSide) != 0) {
                   addMove(sqSrc, sqDst);
@@ -661,7 +737,9 @@ class XqwlPosition {
             while (isInBoard(sqDst)) {
               pcDst = ucpcSquares[sqDst];
               if (pcDst == 0) {
-                addMove(sqSrc, sqDst);
+                if (!bCapture) {
+                  addMove(sqSrc, sqDst);
+                }
               } else {
                 break;
               }
@@ -684,7 +762,9 @@ class XqwlPosition {
           sqDst = getSquareForward(sqSrc, sdPlayer);
           if (isInBoard(sqDst)) {
             pcDst = ucpcSquares[sqDst];
-            if ((pcDst & pcSelfSide) == 0) {
+            if (bCapture
+                ? (pcDst & pcOppSide) != 0
+                : (pcDst & pcSelfSide) == 0) {
               addMove(sqSrc, sqDst);
             }
           }
@@ -693,7 +773,9 @@ class XqwlPosition {
               sqDst = sqSrc + nDelta;
               if (isInBoard(sqDst)) {
                 pcDst = ucpcSquares[sqDst];
-                if ((pcDst & pcSelfSide) == 0) {
+                if (bCapture
+                    ? (pcDst & pcOppSide) != 0
+                    : (pcDst & pcSelfSide) == 0) {
                   addMove(sqSrc, sqDst);
                 }
               }
@@ -846,7 +928,7 @@ class XqwlPosition {
   /// 判断是否被杀
   bool isMate() {
     int i, nGenMoveNum, pcCaptured;
-    List<int> mvs = List.filled(MAX_GEN_MOVES, 0);
+    List<int> mvs = [];
 
     nGenMoveNum = generateMoves(mvs);
     for (i = 0; i < nGenMoveNum; i++) {
@@ -859,5 +941,61 @@ class XqwlPosition {
       }
     }
     return true;
+  }
+
+  int drawValue() {
+    return (nDistance & 1) == 0 ? -DRAW_VALUE : DRAW_VALUE;
+  }
+
+  int repStatus([int nRecur = 1]) {
+    bool bSelfSide, bPerpCheck, bOppPerpCheck;
+    MoveStruct lpmvs;
+
+    bSelfSide = false;
+    bPerpCheck = bOppPerpCheck = true;
+    for (int i = nMoveNum - 1;
+        i >= 0 && mvsList[i].wmv != 0 && mvsList[i].ucpcCaptured == 0;
+        i--) {
+      lpmvs = mvsList[i];
+      if (bSelfSide) {
+        bPerpCheck = bPerpCheck && lpmvs.ucbCheck;
+        if (lpmvs.dwKey == zobr.dwKey) {
+          nRecur--;
+          if (nRecur == 0) {
+            return 1 + (bPerpCheck ? 2 : 0) + (bOppPerpCheck ? 4 : 0);
+          }
+        }
+      } else {
+        bOppPerpCheck = bOppPerpCheck && lpmvs.ucbCheck;
+      }
+      bSelfSide = !bSelfSide;
+    }
+    return 0;
+  }
+
+  int repValue(int nRepStatus) {
+    int vlReturn;
+    vlReturn = ((nRepStatus & 2) == 0 ? 0 : nDistance - BAN_VALUE) +
+        ((nRepStatus & 4) == 0 ? 0 : BAN_VALUE - nDistance);
+    return vlReturn == 0 ? drawValue() : vlReturn;
+  }
+
+  bool nullOkey() {
+    return (sdPlayer == 0 ? vlWhite : vlBlack) > NULL_MARGIN;
+  }
+
+  void mirror(XqwlPosition posMirror) {
+    int sq, pc;
+    posMirror.clearBoard();
+    for (sq = 0; sq < 256; sq++) {
+      pc = ucpcSquares[sq];
+      if (pc != 0) {
+        posMirror.addPiece(getMirrorSquare(sq), pc);
+      }
+    }
+    if (sdPlayer == 1) {
+      posMirror.changeSide();
+    }
+    posMirror.setIrrev();
   }
 }

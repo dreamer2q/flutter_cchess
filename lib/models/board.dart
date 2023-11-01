@@ -17,6 +17,11 @@ class BoardPutAction extends BoardAction {
   const BoardPutAction(this.pc, this.sq);
 
   @override
+  String toString() {
+    return '${ChessPiece(pc)}${PiecePos(sq)}';
+  }
+
+  @override
   List<Object?> get props => [pc, sq];
 }
 
@@ -24,6 +29,11 @@ class BoardMoveAction extends BoardAction {
   final int mv;
 
   const BoardMoveAction(this.mv);
+
+  @override
+  String toString() {
+    return MovePos.mv(mv).toString();
+  }
 
   @override
   List<Object?> get props => [mv];
