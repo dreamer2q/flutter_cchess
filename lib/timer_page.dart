@@ -63,7 +63,7 @@ class TimerText extends StatelessWidget {
 
     return Text(
       '$min:$sec',
-      style: Theme.of(context).textTheme.headline1,
+      style: Theme.of(context).textTheme.displayLarge,
     );
   }
 }
