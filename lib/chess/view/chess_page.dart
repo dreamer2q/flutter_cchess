@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
@@ -8,24 +9,47 @@ import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
+import 'package:flutter_cchess/storage/storage.dart';
 
 import '../bloc/chess_bloc.dart';
 import '../widget/animated_move.dart';
 
 class ChessPage extends StatelessWidget {
-  const ChessPage({Key? key}) : super(key: key);
+  const ChessPage({Key? key, this.playMode = PlayMode.withAI})
+      : super(key: key);
+
+  final PlayMode playMode;
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return _buildGame(
+          SharedPreferencesGameRepository(snapshot.data!),
+        );
+      },
+    );
+  }
+
+  Widget _buildGame(GameRepository repository) {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
           create: (_) => ThemeBloc(),
         ),
         BlocProvider(
-          create: (_) => ChessBloc(ticker: Ticker())
-            ..add(ChessEventInitialized(
+          create: (_) => ChessBloc(
+            ticker: Ticker(),
+            repository: repository,
+          )..add(ChessEventInitialized(
               initialBoard: FenUtil.parse(initialFenString),
+              playMode: playMode,
             )),
         ),
       ],
@@ -114,6 +138,24 @@ class ChessView extends StatelessWidget {
           },
         );
       }
+
+      if (state.playMode == PlayMode.withSelf && state.winningSide != null) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('对局结束'),
+            content: Text(
+              state.winningSide == PlaySide.red ? '红方胜利' : '黑方胜利',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      }
     }
 
     return WillPopScope(
@@ -141,7 +183,8 @@ class ChessView extends StatelessWidget {
               child: BlocListener<ChessBloc, ChessState>(
                 listenWhen: (previous, current) {
                   return previous.playEffect != current.playEffect ||
-                      previous.playStatus != current.playStatus;
+                      previous.playStatus != current.playStatus ||
+                      previous.winningSide != current.winningSide;
                 },
                 listener: handleGameStatus,
                 child: Column(

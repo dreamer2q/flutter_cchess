@@ -7,19 +7,31 @@ import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:flutter_cchess/storage/storage.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
+import 'package:flutter_cchess/utils/fen.dart';
 
 part 'chess_event.dart';
 part 'chess_state.dart';
 
 class ChessBloc extends Bloc<ChessEvent, ChessState> {
   final Ticker ticker;
+  final GameRepository? repository;
+  final String initialFen;
+  late final String gameId;
+  late final DateTime createdAt;
 
   ChessBloc({
     required this.ticker,
+    this.repository,
+    this.initialFen = initialFenString,
+    String? gameId,
+    DateTime? createdAt,
   }) : super(ChessState(
           board: Board(BuiltList.of([])),
         )) {
+    this.gameId = gameId ?? DateTime.now().microsecondsSinceEpoch.toString();
+    this.createdAt = createdAt ?? DateTime.now();
     on<ChessEventInitialized>(_onInitialized);
     on<ChessEventBoardTap>(_onBoardTapped);
     on<ChessEventMoveBegin>(_onPieceBeginMoving);
@@ -39,15 +51,17 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       case PlayMode.withNetwork:
         throw UnimplementedError();
       case PlayMode.withSelf:
-        throw UnimplementedError();
+        // Local two-player mode uses the same board and rule path without an
+        // AI engine. The active side is selected from the board itself.
+        _engine = null;
+        break;
     }
-    emit(
-      state.copyWith(
-        board: event.initialBoard,
-        playMode: event.playMode,
-        status: BoardStatus.idle,
-      ),
-    );
+    emit(state.copyWith(
+      board: event.initialBoard,
+      playMode: event.playMode,
+      status: BoardStatus.idle,
+    ));
+    _persist(state.board);
   }
 
   FutureOr<void> _onBoardTapped(
@@ -82,11 +96,12 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     bool isMovable = state.board.isMovable(event.move);
     PlayEffect? playEffect;
     PlayStatus? playStatus;
+    PlaySide? winningSide;
 
     if (isMovable) {
       ChessPiece? piece = state.board.getPiece(event.move.sqDst);
-      Board board = Board(
-        state.board.actions.rebuild(
+      Board board = state.board.copyWith(
+        actions: state.board.actions.rebuild(
           (b) => b..add(BoardMoveAction(event.move.mv)),
         ),
       );
@@ -97,9 +112,13 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       if (board.innerBoard.isMate()) {
         // 绝杀
         playEffect = PlayEffect.mate;
-        playStatus = state.board.isTurn(state.playSide)
-            ? PlayStatus.win
-            : PlayStatus.lose;
+        winningSide = state.board.innerBoard.sdPlayer == PlaySide.red.index
+            ? PlaySide.red
+            : PlaySide.black;
+        if (state.playMode == PlayMode.withAI) {
+          playStatus =
+              winningSide == state.playSide ? PlayStatus.win : PlayStatus.lose;
+        }
       } else if (board.innerBoard.checked()) {
         // 将军
         playEffect = PlayEffect.check;
@@ -114,6 +133,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       animeMoveInvalid: isMovable ? null : event.move,
       playEffect: playEffect,
       playStatus: playStatus,
+      winningSide: winningSide,
       status: BoardStatus.busy,
     ));
   }
@@ -131,7 +151,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       );
       lastMove = MovePos.mv(move.mv);
 
-      if (_engine != null &&
+      if (state.playMode == PlayMode.withAI &&
+          _engine != null &&
           !board.isTurn(state.playSide) &&
           state.playStatus == null) {
         _engine?.makeMove(move.mv).then(
@@ -151,18 +172,27 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       lastMove: lastMove,
       status: BoardStatus.idle,
     ));
+    _persist(board);
   }
 
   FutureOr<void> _onChessUndoEvent(
       ChessEventUndo event, Emitter<ChessState> emit) async {
-    if (state.board.lastMoves.length > 1 &&
-        state.board.isTurn(state.playSide)) {
+    final canUndo = state.playMode == PlayMode.withSelf
+        ? state.board.lastMoves.isNotEmpty
+        : state.board.lastMoves.length > 1 &&
+            state.board.isTurn(state.playSide);
+    if (canUndo) {
       Board board = state.board;
-      for (int i = 0; i < 2; i++) {
+      final undoCount = state.playMode == PlayMode.withSelf ? 1 : 2;
+      for (int i = 0; i < undoCount; i++) {
         final lastMove = board.actions.last as BoardMoveAction;
-        board = Board(board.actions.rebuild((b) => b.removeLast()));
+        board = board.copyWith(
+          actions: board.actions.rebuild((b) => b.removeLast()),
+        );
         ChessPiece? p = board.getPiece(SquareBoard.getDst(lastMove.mv));
-        await _engine?.requestUndo(lastMove.mv, p == null ? 0 : p.pc);
+        if (state.playMode == PlayMode.withAI) {
+          await _engine?.requestUndo(lastMove.mv, p == null ? 0 : p.pc);
+        }
       }
 
       emit(
@@ -170,6 +200,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           board: board,
         ),
       );
+      _persist(board);
     } else {}
   }
 
@@ -184,5 +215,32 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         );
       });
     }
+  }
+
+  void _persist(Board board) {
+    final store = repository;
+    if (store == null) return;
+
+    final result = state.winningSide == PlaySide.red
+        ? GameResult.redWin
+        : state.winningSide == PlaySide.black
+            ? GameResult.blackWin
+            : state.playStatus == PlayStatus.draw
+                ? GameResult.draw
+                : GameResult.inProgress;
+    final record = GameRecord(
+      id: gameId,
+      initialFen: initialFen,
+      moves: board.lastMoves
+          .map((move) => GameMove(from: move.sqSrc, to: move.sqDst))
+          .toList(),
+      mode: state.playMode == PlayMode.withSelf
+          ? GamePlayMode.self
+          : GamePlayMode.ai,
+      result: result,
+      createdAt: createdAt,
+      updatedAt: DateTime.now(),
+    );
+    unawaited(store.save(record));
   }
 }

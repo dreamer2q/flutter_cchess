@@ -23,6 +23,7 @@ class ChessState extends Equatable {
     this.hintMoves,
     this.playEffect,
     this.playStatus,
+    this.winningSide,
     this.lastMove,
   });
 
@@ -59,6 +60,9 @@ class ChessState extends Equatable {
   /// 棋局结果
   final PlayStatus? playStatus;
 
+  /// 本地双人模式下的胜方
+  final PlaySide? winningSide;
+
   /// 保存上次动作, 用于提示
   final MovePos? lastMove;
 
@@ -79,6 +83,7 @@ class ChessState extends Equatable {
         playSide,
         playEffect,
         playStatus,
+        winningSide,
         status,
       ];
 
@@ -94,6 +99,7 @@ class ChessState extends Equatable {
     BuiltList<MovePos>? hintMoves,
     PlayEffect? playEffect,
     PlayStatus? playStatus,
+    PlaySide? winningSide,
     MovePos? lastMove,
   }) {
     return ChessState(
@@ -108,6 +114,7 @@ class ChessState extends Equatable {
       hintMoves: hintMoves ?? this.hintMoves,
       playEffect: playEffect,
       playStatus: playStatus ?? this.playStatus,
+      winningSide: winningSide ?? this.winningSide,
       lastMove: lastMove ?? this.lastMove,
     );
   }

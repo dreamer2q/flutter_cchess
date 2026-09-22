@@ -40,7 +40,9 @@ class BoardMoveAction extends BoardAction {
 }
 
 class Board extends Equatable {
-  Board(this.actions) : innerBoard = SquareBoard() {
+  Board(this.actions, {this.initialSideToMove = 0})
+      : innerBoard = SquareBoard() {
+    innerBoard.sdPlayer = initialSideToMove;
     for (final ac in actions) {
       if (ac is BoardPutAction) {
         innerBoard.addPiece(ac.sq, ac.pc);
@@ -53,6 +55,10 @@ class Board extends Equatable {
   final SquareBoard innerBoard;
 
   final BuiltList<BoardAction> actions;
+
+  /// The side that was to move before the first recorded action.
+  /// This is needed when rebuilding a position parsed from a black-to-move FEN.
+  final int initialSideToMove;
 
   List<PiecePair> get pcPairs {
     final List<PiecePair> pairs = [];
@@ -96,17 +102,23 @@ class Board extends Equatable {
   }
 
   bool isSelectable(ChessPiece pc) {
-    return innerBoard.sdPlayer != pc.sideTag;
+    // SquareBoard uses 0/1 for the side to move while ChessPiece exposes
+    // 1/0 for red/black. Convert through the engine's side tag constants.
+    return SquareBoard.isSideTag(innerBoard.sdPlayer) ==
+        (pc.sideTag == 1 ? 8 : 16);
   }
 
   Board copyWith({
     BuiltList<BoardAction>? actions,
   }) {
-    return Board(actions ?? this.actions);
+    return Board(
+      actions ?? this.actions,
+      initialSideToMove: initialSideToMove,
+    );
   }
 
   @override
-  List<Object?> get props => [actions];
+  List<Object?> get props => [actions, initialSideToMove];
 
   // 轮到我走
   bool isTurn(PlaySide playSide) {

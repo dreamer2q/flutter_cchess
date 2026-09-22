@@ -34,7 +34,9 @@ class ChessBoardMenu extends StatelessWidget {
             builder: (context, state) => _MenuItem(
               label: '悔棋',
               icon: Icons.undo,
-              onPressed: state.board.lastMoves.length > 1
+              onPressed: (state.playMode == PlayMode.withSelf
+                      ? state.board.lastMoves.isNotEmpty
+                      : state.board.lastMoves.length > 1)
                   ? () => context.read<ChessBloc>().add(ChessEventUndo())
                   : null,
             ),
