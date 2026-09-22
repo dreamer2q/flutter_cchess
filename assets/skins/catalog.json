@@ -1,6 +1,7 @@
 {
   "themes": [
     "assets/skins/woods/config.json",
-    "assets/skins/night/config.json"
+    "assets/skins/night/config.json",
+    "assets/skins/maple/config.json"
   ]
 }

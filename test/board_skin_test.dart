@@ -98,6 +98,27 @@ void main() {
     expect(skin.blackPieces, hasLength(7));
   });
 
+  test('maple skin matches the reference-driven asset contract', () async {
+    final source = await File('assets/skins/maple/config.json').readAsString();
+    final skin = BoardSkin.fromJson(
+      jsonDecode(source) as Map<String, dynamic>,
+    );
+
+    expect(skin.id, 'light-maple');
+    expect(skin.boardSize, const Size(900, 1000));
+    expect(skin.anchors.topLeft, const Offset(50, 50));
+    expect(skin.anchors.bottomRight, const Offset(850, 950));
+    expect(skin.redPieces, hasLength(7));
+    expect(skin.blackPieces, hasLength(7));
+
+    final runtimeAssets = <String>{
+      skin.boardAsset,
+      ...skin.redPieces.values,
+      ...skin.blackPieces.values,
+    };
+    expect(runtimeAssets.every((asset) => File(asset).existsSync()), isTrue);
+  });
+
   test('skin catalog discovers themes without renderer changes', () async {
     final source = await File('assets/skins/catalog.json').readAsString();
     final catalog = BoardSkinCatalog.fromJson(
@@ -107,6 +128,7 @@ void main() {
     expect(catalog.configAssets, [
       'assets/skins/woods/config.json',
       'assets/skins/night/config.json',
+      'assets/skins/maple/config.json',
     ]);
   });
 }

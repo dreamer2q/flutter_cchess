@@ -41,7 +41,7 @@ class ChessPage extends StatelessWidget {
         BlocProvider(
           create: (_) => ThemeBloc()
             ..add(const ThemeAssetRequested(
-              'assets/skins/night/config.json',
+              'assets/skins/maple/config.json',
             )),
         ),
         BlocProvider(

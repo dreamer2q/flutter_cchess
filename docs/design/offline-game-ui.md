@@ -71,6 +71,13 @@ Adding or switching a theme must not require changes to board layout or input
 handling. The same anchor transform controls both piece placement and tap hit
 testing.
 
+Current theme packages:
+
+- `woods`: original classic board.
+- `night`: dark walnut board for the night direction.
+- `maple`: light maple board based on the low-relief wooden reference style;
+  this is the current default while the theme picker is pending.
+
 ## V2 Interaction Decisions
 
 - Mobile has one overflow menu in the top bar. It is not duplicated in the
