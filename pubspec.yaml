@@ -64,7 +64,13 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/skins/catalog.json
     - assets/skins/woods/
+    - assets/skins/night/config.json
+    - assets/skins/night/board.png
+    - assets/skins/night/background-mobile.png
+    - assets/skins/night/background-desktop.png
+    - assets/skins/night/pieces/
     - assets/images/
     - assets/engines/
     - assets/sounds/

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
 import 'package:flutter_cchess/chess/widget/chess_menu.dart';
-import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
@@ -41,7 +39,10 @@ class ChessPage extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (_) => ThemeBloc(),
+          create: (_) => ThemeBloc()
+            ..add(const ThemeAssetRequested(
+              'assets/skins/night/config.json',
+            )),
         ),
         BlocProvider(
           create: (_) => ChessBloc(
@@ -200,7 +201,7 @@ class ChessView extends StatelessWidget {
                         );
                       },
                     ),
-                    ChessBoard(),
+                    const Expanded(child: ChessBoard()),
                   ],
                 ),
               ),
@@ -233,7 +234,7 @@ class ChessBoard extends StatelessWidget {
             children: [
               // board (with border)
               // Image.asset('assets/skins/woods/board.jpg'),
-              Image.asset(theme.boardAsset),
+              theme.buildBoard(context),
               // padding is used to remove border
               Padding(
                 padding: theme.boardPadding,
@@ -242,12 +243,10 @@ class ChessBoard extends StatelessWidget {
                   onTapUp: (TapUpDetails tap) {
                     final bloc = context.read<ChessBloc>();
                     final loc = tap.localPosition;
-                    final x = loc.dx ~/ theme.pieceSize;
-                    final y = loc.dy ~/ theme.pieceSize;
-                    debugPrint('tap: ${tap.localPosition}, {$x,$y}');
-                    bloc.add(ChessEventBoardTap(
-                      PiecePos(SquareBoard.coordXYFix(x, y)),
-                    ));
+                    final position = theme.hitTest(loc);
+                    if (position == null) return;
+                    debugPrint('tap: ${tap.localPosition}, $position');
+                    bloc.add(ChessEventBoardTap(position));
                   },
                   child: Stack(
                     children: [

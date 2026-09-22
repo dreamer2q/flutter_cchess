@@ -184,4 +184,12 @@ class WoodsBoardTheme extends BoardTheme {
         y = SquareBoard.getRankY(pos.sq) - SquareBoard.RANK_TOP;
     return FractionalOffset(x / 8, y / 9);
   }
+
+  @override
+  PiecePos? hitTest(Offset localPosition) {
+    final x = localPosition.dx ~/ pieceSize;
+    final y = localPosition.dy ~/ pieceSize;
+    if (x < 0 || x > 8 || y < 0 || y > 9) return null;
+    return PiecePos(SquareBoard.coordXYFix(x, y));
+  }
 }

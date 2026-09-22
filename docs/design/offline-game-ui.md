@@ -43,6 +43,27 @@ not include accounts, networking, rankings, chat, or monetization.
 - Avoid oversized headings, nested cards, decorative pills, and marketing-style
   copy.
 
+## Theme Asset Contract
+
+Each board theme is a self-contained directory registered in
+`assets/skins/catalog.json`. A theme contains:
+
+- `config.json`: theme identity, logical board size, four board anchors, piece
+  size, and asset paths.
+- One board bitmap containing the complete board surface, frame, grid, palace,
+  and river marks. Flutter does not redraw or guess the grid.
+- Four anchors (`topLeft`, `topRight`, `bottomLeft`, `bottomRight`) identifying
+  the outer playable intersections. All 90 intersections are calculated by
+  bilinear interpolation, so slightly skewed or perspective-styled boards
+  remain supported.
+- Fourteen transparent piece images. Board, pieces, page backgrounds, and
+  interaction markers remain separate layers and can be replaced independently.
+- Optional mobile and desktop page backgrounds.
+
+Adding or switching a theme must not require changes to board layout or input
+handling. The same anchor transform controls both piece placement and tap hit
+testing.
+
 ## V2 Interaction Decisions
 
 - Mobile has one overflow menu in the top bar. It is not duplicated in the

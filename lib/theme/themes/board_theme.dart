@@ -28,6 +28,8 @@ abstract class BoardTheme extends Equatable {
 
   Alignment getAlignment(PiecePos pos);
 
+  PiecePos? hitTest(Offset localPosition);
+
   @override
   List<Object?> get props => [boardSize, boardPadding, pieceSize, pieceAssets];
 }
