@@ -3,6 +3,13 @@
 This design covers the offline AI and local two-player game screens. It does
 not include accounts, networking, rankings, chat, or monetization.
 
+Companion specifications:
+
+- `game-interaction-spec.md`: state transitions, input, motion, lifecycle, and
+  accessibility.
+- `game-audio-spec.md`: sound cues, music direction, mixing, and audio
+  lifecycle.
+
 ## Responsive Layout
 
 - Mobile (`< 720dp`): opponent status, board, player status, and a fixed bottom
