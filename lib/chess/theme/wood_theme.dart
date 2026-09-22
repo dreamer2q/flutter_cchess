@@ -9,10 +9,8 @@ class WoodsBoardTheme extends BoardTheme {
   const WoodsBoardTheme();
 
   @override
-  EdgeInsets get boardPadding => const EdgeInsets.symmetric(
-        vertical: 3,
-        horizontal: 4,
-      );
+  EdgeInsets get boardPadding =>
+      const EdgeInsets.symmetric(vertical: 3, horizontal: 4);
 
   @override
   String get boardAsset => 'assets/skins/woods/board.jpg';
@@ -51,12 +49,10 @@ class WoodsBoardTheme extends BoardTheme {
             offset: Offset(4, 6),
             blurRadius: 2,
             spreadRadius: 2,
-          )
+          ),
         ],
         //border: Border.all(color: Color.fromRGBO(255, 255, 255, .7), width: 2),
-        borderRadius: BorderRadius.all(
-          Radius.circular(pieceSize / 2),
-        ),
+        borderRadius: BorderRadius.all(Radius.circular(pieceSize / 2)),
       ),
       child: Image.asset(
         'assets/skins/woods/$png.png',
@@ -89,11 +85,9 @@ class WoodsBoardTheme extends BoardTheme {
                 offset: Offset(4, 6),
                 blurRadius: 2,
                 spreadRadius: 2,
-              )
+              ),
             ],
-            borderRadius: BorderRadius.all(
-              Radius.circular(pieceSize / 2),
-            ),
+            borderRadius: BorderRadius.all(Radius.circular(pieceSize / 2)),
           ),
           child: SizedBox.expand(),
         ),
@@ -124,9 +118,7 @@ class WoodsBoardTheme extends BoardTheme {
           width: 2,
           style: BorderStyle.solid,
         ),
-        borderRadius: BorderRadius.all(
-          Radius.circular(pieceSize / 2),
-        ),
+        borderRadius: BorderRadius.all(Radius.circular(pieceSize / 2)),
       ),
     );
   }
@@ -154,9 +146,7 @@ class WoodsBoardTheme extends BoardTheme {
           width: 2,
           style: BorderStyle.solid,
         ),
-        borderRadius: BorderRadius.all(
-          Radius.circular(pieceSize / 2),
-        ),
+        borderRadius: BorderRadius.all(Radius.circular(pieceSize / 2)),
       ),
       child: buildPiece(context, piece),
     );
@@ -171,7 +161,7 @@ class WoodsBoardTheme extends BoardTheme {
       child: DecoratedBox(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.green.withOpacity(0.6),
+          color: Colors.green.withValues(alpha: 0.6),
         ),
         child: SizedBox(width: 12, height: 12),
       ),

@@ -1,4 +1,3 @@
-import 'dart:ffi';
 import 'dart:typed_data';
 
 class RC4 {
@@ -6,7 +5,7 @@ class RC4 {
   int x = 0;
   int y = 0;
 
-// 用空密钥初始化密码流生成器
+  // 用空密钥初始化密码流生成器
   RC4.initZero() {
     int i, j;
     int uc;
@@ -73,7 +72,9 @@ class ZobristStruct {
 class Zobrist {
   ZobristStruct player = ZobristStruct.initZero();
   List<List<ZobristStruct>> table /*[14][256] */ = List.generate(
-      14, (_) => List.generate(256, (_) => ZobristStruct.initZero()));
+    14,
+    (_) => List.generate(256, (_) => ZobristStruct.initZero()),
+  );
 
   Zobrist.initZobrist() {
     RC4 rc4 = RC4.initZero();

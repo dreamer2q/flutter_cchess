@@ -42,7 +42,17 @@ class _PendingResponse<T> {
   Future<T> get future => completer.future;
 }
 
-class ChessEngine {
+abstract class ChessEnginePort {
+  Future<void> restore(Iterable<int> moves);
+
+  Future<int> makeMove(int mv);
+
+  Future<int> requestMove();
+
+  Future<void> requestUndo(int mv, int pc);
+}
+
+class ChessEngine implements ChessEnginePort {
   static void _engineHandler(SendPort sendPort) {
     final XqwlSearch search = XqwlSearch();
     final ReceivePort recvPort = ReceivePort();
@@ -66,9 +76,15 @@ class ChessEngine {
         case 'board.reset':
           search.pos.startup();
           break;
+        case 'board.restore':
+          search.pos.startup();
+          for (final mv in List<int>.from(params as Iterable)) {
+            if (!search.pos.legalMove(mv) || !search.pos.makeMove(mv)) {
+              throw Exception('cannot restore illegal move: $mv');
+            }
+          }
+          break;
         case 'board.undoMove':
-          int mv = params[0];
-          int pc = params[1];
           search.pos.undoMakeMove();
           break;
         default:
@@ -106,9 +122,8 @@ class ChessEngine {
   }
 
   final ReceivePort _recvPort = ReceivePort();
-  bool _initialized = false;
   late Isolate _isolate;
-  late SendPort _sendPort;
+  final Completer<SendPort> _readyPort = Completer<SendPort>();
   final Map<int, _PendingResponse> pendingResponseMap = {};
 
   void _onMessage(message) {
@@ -121,16 +136,13 @@ class ChessEngine {
       }
 
       if (message.error != null) {
-        pending.completer.completeError(
-          message.error,
-        );
+        pending.completer.completeError(message.error);
       } else {
         pending.completer.complete(message.result);
       }
       pendingResponseMap.remove(message.id);
     } else if (message is SendPort) {
-      _sendPort = message;
-      _initialized = true;
+      if (!_readyPort.isCompleted) _readyPort.complete(message);
     }
   }
 
@@ -138,23 +150,32 @@ class ChessEngine {
     _isolate.kill();
   }
 
-  Future invokeMethod(String method, dynamic params) {
+  Future invokeMethod(String method, dynamic params) async {
+    final sendPort = await _readyPort.future;
     final _Request request = _Request.method(method, params);
     final _PendingResponse pendingRes = _PendingResponse(request);
     pendingResponseMap[request.id] = pendingRes;
-    _sendPort.send(request);
-    return pendingRes.future;
+    sendPort.send(request);
+    return await pendingRes.future;
   }
 
+  @override
   Future<int> makeMove(int mv) async {
     return await invokeMethod('board.makeMove', mv);
   }
 
+  @override
+  Future<void> restore(Iterable<int> moves) async {
+    await invokeMethod('board.restore', moves.toList(growable: false));
+  }
+
+  @override
   Future<int> requestMove() async {
     return await invokeMethod('board.requestMove', null);
   }
 
-  Future requestUndo(int mv, int pc) async {
-    return await invokeMethod('board.undoMove', [mv, pc]);
+  @override
+  Future<void> requestUndo(int mv, int pc) async {
+    await invokeMethod('board.undoMove', [mv, pc]);
   }
 }

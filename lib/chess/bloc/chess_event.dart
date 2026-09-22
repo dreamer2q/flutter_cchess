@@ -39,7 +39,14 @@ class ChessEventMoveBegin extends ChessEvent {
 }
 
 class ChessEventMoveEnd extends ChessEvent {
-  const ChessEventMoveEnd();
+  const ChessEventMoveEnd([this.expectedMove]);
+
+  /// When provided by the timeout fallback, prevents an old callback from
+  /// completing a newer animation.
+  final MovePos? expectedMove;
+
+  @override
+  List<Object> get props => [if (expectedMove != null) expectedMove!];
 }
 
 class ChessEventUndo extends ChessEvent {
@@ -48,4 +55,16 @@ class ChessEventUndo extends ChessEvent {
 
 class ChessEventGetHint extends ChessEvent {
   const ChessEventGetHint();
+}
+
+class ChessEventPause extends ChessEvent {
+  const ChessEventPause();
+}
+
+class ChessEventResume extends ChessEvent {
+  const ChessEventResume();
+}
+
+class ChessEventResign extends ChessEvent {
+  const ChessEventResign();
 }

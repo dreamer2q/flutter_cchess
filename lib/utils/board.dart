@@ -1,6 +1,3 @@
-import 'package:flutter_cchess/chess/game/game_board.dart';
-import 'package:flutter_cchess/models/piece.dart';
-
 // extension PiecePositionEx on PiecePosition {
 //   int get sq => (SquareBoard.RANK_TOP + y) * 16 + (SquareBoard.FILE_LEFT + x);
 // }

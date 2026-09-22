@@ -1,6 +1,6 @@
 part of 'chess_bloc.dart';
 
-enum BoardStatus { initialized, idle, busy }
+enum BoardStatus { initialized, idle, busy, thinking, paused, finished }
 
 enum PlaySide { red, black }
 
@@ -85,6 +85,7 @@ class ChessState extends Equatable {
         playStatus,
         winningSide,
         status,
+        lastMove,
       ];
 
   ChessState copyWith({
@@ -101,21 +102,25 @@ class ChessState extends Equatable {
     PlayStatus? playStatus,
     PlaySide? winningSide,
     MovePos? lastMove,
+    bool clearSelected = false,
+    bool clearHintMoves = false,
+    bool clearLastMove = false,
+    bool clearResult = false,
   }) {
     return ChessState(
       board: board ?? this.board,
-      selected: selected,
-      selectedMoves: selectedMoves,
+      selected: clearSelected ? null : selected,
+      selectedMoves: clearSelected ? null : selectedMoves,
       animeMove: animeMove,
       animeMoveInvalid: animeMoveInvalid,
       status: status ?? this.status,
       playMode: playMode ?? this.playMode,
       playSide: playSide ?? this.playSide,
-      hintMoves: hintMoves ?? this.hintMoves,
+      hintMoves: clearHintMoves ? null : hintMoves ?? this.hintMoves,
       playEffect: playEffect,
-      playStatus: playStatus ?? this.playStatus,
-      winningSide: winningSide ?? this.winningSide,
-      lastMove: lastMove ?? this.lastMove,
+      playStatus: clearResult ? null : playStatus ?? this.playStatus,
+      winningSide: clearResult ? null : winningSide ?? this.winningSide,
+      lastMove: clearLastMove ? null : lastMove ?? this.lastMove,
     );
   }
 }

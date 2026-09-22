@@ -21,20 +21,16 @@ class AppBlocObserver extends BlocObserver {
 
 void main() {
   Bloc.observer = AppBlocObserver();
-  runApp(const MyApp());
-
   SystemChrome.setSystemUIOverlayStyle(
-    SystemUiOverlayStyle(
+    const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarBrightness: Brightness.light,
-      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF171A1A),
+      systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
-
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -43,12 +39,41 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Chinses Chess',
+      title: '中国象棋',
       theme: ThemeData(
-        primarySwatch: Colors.lightBlue,
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF2D9B73),
+          brightness: Brightness.light,
+          surface: const Color(0xFFF9F8F5),
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF3F1EC),
+        visualDensity: VisualDensity.standard,
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        bottomSheetTheme: const BottomSheetThemeData(
+          showDragHandle: true,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+          ),
+        ),
       ),
       debugShowCheckedModeBanner: false,
-      home: NewChessPage(),
+      home: const NewChessPage(),
     );
   }
 }

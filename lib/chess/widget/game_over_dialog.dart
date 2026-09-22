@@ -10,12 +10,6 @@ class GameOverDialog extends StatefulWidget {
 class _GameOverDialogState extends State<GameOverDialog> {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      child: Column(
-        children: [
-          Text('Game over'),
-        ],
-      ),
-    );
+    return const Column(children: [Text('Game over')]);
   }
 }

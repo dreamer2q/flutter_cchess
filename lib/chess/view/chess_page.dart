@@ -1,213 +1,151 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_cchess/audio/audio.dart';
+import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
+import 'package:flutter_cchess/chess/widget/animated_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
-import 'package:flutter_cchess/chess/widget/chess_menu.dart';
+import 'package:flutter_cchess/models/board.dart';
+import 'package:flutter_cchess/models/piece.dart';
+import 'package:flutter_cchess/settings/settings.dart';
+import 'package:flutter_cchess/storage/storage.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
-import 'package:flutter_cchess/storage/storage.dart';
 
 import '../bloc/chess_bloc.dart';
-import '../widget/animated_move.dart';
 
-class ChessPage extends StatelessWidget {
-  const ChessPage({Key? key, this.playMode = PlayMode.withAI})
-      : super(key: key);
+class ChessPage extends StatefulWidget {
+  const ChessPage({
+    super.key,
+    this.playMode = PlayMode.withAI,
+    this.initialRecord,
+  });
 
   final PlayMode playMode;
+  final GameRecord? initialRecord;
+
+  @override
+  State<ChessPage> createState() => _ChessPageState();
+}
+
+class _ChessPageState extends State<ChessPage> {
+  late final Future<_GameBootstrap> _bootstrap = _load();
+
+  Future<_GameBootstrap> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    final gameRepository = SharedPreferencesGameRepository(preferences);
+    final settingsRepository = SharedPreferencesGameSettingsRepository(
+      preferences,
+    );
+    final record = widget.initialRecord;
+    final initialFen = record?.initialFen ?? initialFenString;
+    var initialBoard = FenUtil.parse(initialFen);
+    if (record != null) {
+      for (final move in record.moves) {
+        final movePos = MovePos(move.from, move.to);
+        if (!initialBoard.isMovable(movePos)) break;
+        initialBoard = initialBoard.copyWith(
+          actions: initialBoard.actions.rebuild(
+            (actions) => actions..add(BoardMoveAction(movePos.mv)),
+          ),
+        );
+      }
+    }
+    return _GameBootstrap(
+      gameRepository: gameRepository,
+      settingsRepository: settingsRepository,
+      settings: await settingsRepository.load(),
+      initialBoard: initialBoard,
+      initialFen: initialFen,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<SharedPreferences>(
-      future: SharedPreferences.getInstance(),
+    return FutureBuilder<_GameBootstrap>(
+      future: _bootstrap,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _LoadingFailure(onBack: () => Navigator.maybePop(context));
+        }
         if (!snapshot.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return _buildGame(
-          SharedPreferencesGameRepository(snapshot.data!),
+        final bootstrap = snapshot.data!;
+        return MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => ThemeBloc()
+                ..add(ThemeAssetRequested(bootstrap.settings.themeConfigAsset)),
+            ),
+            BlocProvider(
+              create: (_) =>
+                  ChessBloc(
+                    ticker: Ticker(),
+                    repository: bootstrap.gameRepository,
+                    initialFen: bootstrap.initialFen,
+                    gameId: widget.initialRecord?.id,
+                    createdAt: widget.initialRecord?.createdAt,
+                  )..add(
+                    ChessEventInitialized(
+                      initialBoard: bootstrap.initialBoard,
+                      playMode: widget.playMode,
+                    ),
+                  ),
+            ),
+          ],
+          child: ChessView(
+            initialSettings: bootstrap.settings,
+            settingsRepository: bootstrap.settingsRepository,
+            isResumedGame: widget.initialRecord != null,
+          ),
         );
       },
-    );
-  }
-
-  Widget _buildGame(GameRepository repository) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (_) => ThemeBloc()
-            ..add(const ThemeAssetRequested(
-              'assets/skins/maple/config.json',
-            )),
-        ),
-        BlocProvider(
-          create: (_) => ChessBloc(
-            ticker: Ticker(),
-            repository: repository,
-          )..add(ChessEventInitialized(
-              initialBoard: FenUtil.parse(initialFenString),
-              playMode: playMode,
-            )),
-        ),
-      ],
-      child: ChessView(),
     );
   }
 }
 
-class ChessView extends StatelessWidget {
-  const ChessView({Key? key}) : super(key: key);
+class _GameBootstrap {
+  const _GameBootstrap({
+    required this.gameRepository,
+    required this.settingsRepository,
+    required this.settings,
+    required this.initialBoard,
+    required this.initialFen,
+  });
+
+  final GameRepository gameRepository;
+  final GameSettingsRepository settingsRepository;
+  final GameSettings settings;
+  final Board initialBoard;
+  final String initialFen;
+}
+
+class _LoadingFailure extends StatelessWidget {
+  const _LoadingFailure({required this.onBack});
+
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
-    handleGameStatus(BuildContext context, ChessState state) {
-      if (state.playEffect != null) {
-        PlayEffect playEffect = state.playEffect!;
-        switch (playEffect) {
-          case PlayEffect.check:
-            AnimatedOverlay.show(
-              context: context,
-              child: Align(
-                alignment: Alignment.center,
-                child: Container(
-                  child: Text(
-                    '将军',
-                    style: TextStyle(fontSize: 32),
-                  ),
-                ),
-              ),
-            );
-            break;
-
-          case PlayEffect.eat:
-            AnimatedOverlay.show(
-              context: context,
-              child: Align(
-                alignment: Alignment.center,
-                child: Container(
-                  child: Text(
-                    '吃',
-                    style: TextStyle(
-                      fontSize: 48,
-                      color: Colors.red,
-                    ),
-                  ),
-                ),
-              ),
-            );
-            break;
-
-          case PlayEffect.mate:
-            AnimatedOverlay.show(
-              context: context,
-              child: Align(
-                alignment: Alignment.center,
-                child: Container(
-                  child: Text(
-                    '绝杀',
-                    style: TextStyle(
-                      fontSize: 32,
-                    ),
-                  ),
-                ),
-              ),
-            );
-            break;
-        }
-      }
-
-      if (state.playStatus != null) {
-        PlayStatus status = state.playStatus!;
-        showDialog(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: Text("Game Over"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (status == PlayStatus.win) Text("You win!"),
-                  if (status == PlayStatus.lose) Text("You lose!"),
-                  if (status == PlayStatus.draw) Text("draw!"),
-                ],
-              ),
-            );
-          },
-        );
-      }
-
-      if (state.playMode == PlayMode.withSelf && state.winningSide != null) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('对局结束'),
-            content: Text(
-              state.winningSide == PlaySide.red ? '红方胜利' : '黑方胜利',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-        );
-      }
-    }
-
-    return WillPopScope(
-      onWillPop: () async {
-        return false;
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: Icon(Icons.close),
-            color: Colors.black,
-            onPressed: () {},
-          ),
-          title: const Text(
-            'ChessView',
-            style: TextStyle(color: Colors.green),
-          ),
-          shadowColor: Colors.transparent,
-          backgroundColor: Colors.transparent,
-          actions: [],
-        ),
-        body: Column(
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: BlocListener<ChessBloc, ChessState>(
-                listenWhen: (previous, current) {
-                  return previous.playEffect != current.playEffect ||
-                      previous.playStatus != current.playStatus ||
-                      previous.winningSide != current.winningSide;
-                },
-                listener: handleGameStatus,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    BlocBuilder<ChessBloc, ChessState>(
-                      builder: (context, state) {
-                        final s = state.board.innerBoard.evaluate();
-                        return Container(
-                          child: Row(
-                            children: [Text('$s')],
-                          ),
-                        );
-                      },
-                    ),
-                    const Expanded(child: ChessBoard()),
-                  ],
-                ),
-              ),
-            ),
-            ChessBoardMenu(),
-            SizedBox(height: 12),
+            const Icon(Icons.error_outline, size: 40),
+            const SizedBox(height: 12),
+            const Text('无法加载本地棋局'),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: onBack, child: const Text('返回')),
           ],
         ),
       ),
@@ -215,134 +153,200 @@ class ChessView extends StatelessWidget {
   }
 }
 
-class ChessBoard extends StatelessWidget {
-  const ChessBoard({Key? key}) : super(key: key);
+class ChessView extends StatefulWidget {
+  const ChessView({
+    super.key,
+    required this.initialSettings,
+    required this.settingsRepository,
+    this.isResumedGame = false,
+  });
+
+  final GameSettings initialSettings;
+  final GameSettingsRepository settingsRepository;
+  final bool isResumedGame;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = context.select((ThemeBloc bloc) => bloc.state.theme);
-    final state = context.select((ChessBloc bloc) => bloc.state);
-    final board = state.board;
+  State<ChessView> createState() => _ChessViewState();
+}
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-      child: FittedBox(
-        child: SizedBox(
-          height: theme.boardSize.height,
-          width: theme.boardSize.width,
-          child: Stack(
+class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
+  late GameSettings _settings = widget.initialSettings;
+  late final AudioService _audioService;
+  late final GameAudioController _audioController;
+  ChessState? _previousState;
+  var _inspectorTab = 0;
+  var _resultShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioService = AudioplayersAudioService(enabled: _settings.soundEnabled);
+    _audioController = GameAudioController(service: _audioService);
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _previousState = context.read<ChessBloc>().state;
+      if (!widget.isResumedGame) {
+        _playCue(GameAudioCue.newGame, 'new-game');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_audioController.dispose());
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
+    if (state == AppLifecycleState.resumed) {
+      context.read<ChessBloc>().add(const ChessEventResume());
+      return;
+    }
+    context.read<ChessBloc>().add(const ChessEventPause());
+    unawaited(_audioController.stopAll());
+  }
+
+  Future<void> _saveSettings(GameSettings settings) async {
+    final soundChanged = settings.soundEnabled != _settings.soundEnabled;
+    setState(() => _settings = settings);
+    if (soundChanged) {
+      await _audioService.setEnabled(settings.soundEnabled);
+    }
+    await widget.settingsRepository.save(settings);
+  }
+
+  void _handleState(BuildContext context, ChessState state) {
+    final previous = _previousState;
+    _previousState = state;
+
+    if (state.animeMoveInvalid != null &&
+        previous?.animeMoveInvalid != state.animeMoveInvalid) {
+      _playCue(
+        GameAudioCue.illegalMove,
+        'illegal-${state.animeMoveInvalid!.mv}',
+      );
+      if (_settings.hapticsEnabled) HapticFeedback.lightImpact();
+    }
+
+    if (previous?.status == BoardStatus.busy &&
+        state.status != BoardStatus.busy &&
+        state.animeMove == null) {
+      _playCommittedMoveFeedback(state);
+    } else if (state.status == BoardStatus.finished &&
+        previous?.status != BoardStatus.finished) {
+      _playResultFeedback(state);
+    }
+
+    if (state.playEffect != null && state.status != BoardStatus.busy) {
+      final label = _playEffectLabel(state.playEffect!);
+      AnimatedOverlay.show(
+        context: context,
+        child: _EffectLabel(label: label),
+      );
+    }
+    if (state.status == BoardStatus.finished && !_resultShown) {
+      _resultShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showResult(state);
+      });
+    }
+  }
+
+  void _playCommittedMoveFeedback(ChessState state) {
+    if (state.status == BoardStatus.finished) {
+      _playResultFeedback(state);
+      return;
+    }
+    final cues = <GameAudioCue>[GameAudioCue.move];
+    if (state.playEffect == PlayEffect.eat) cues.add(GameAudioCue.capture);
+    if (state.playEffect == PlayEffect.check ||
+        state.playEffect == PlayEffect.mate) {
+      cues.add(GameAudioCue.check);
+    }
+    _playCues(cues, 'move-${state.board.lastMoves.length}');
+    if (_settings.hapticsEnabled) HapticFeedback.selectionClick();
+  }
+
+  void _playResultFeedback(ChessState state) {
+    final cue = state.playStatus == PlayStatus.draw
+        ? GameAudioCue.draw
+        : state.playMode == PlayMode.withAI &&
+              state.winningSide != state.playSide
+        ? GameAudioCue.loss
+        : GameAudioCue.win;
+    _playCue(cue, 'result-${state.board.lastMoves.length}');
+    if (_settings.hapticsEnabled) HapticFeedback.mediumImpact();
+  }
+
+  void _playCue(GameAudioCue cue, Object stepId) {
+    _playCues(<GameAudioCue>[cue], stepId);
+  }
+
+  void _playCues(Iterable<GameAudioCue> cues, Object stepId) {
+    unawaited(
+      _audioController
+          .playForStep(stepId: stepId, candidates: cues)
+          .catchError((Object _) => null),
+    );
+  }
+
+  Future<void> _showResult(ChessState state) async {
+    final winner = state.winningSide;
+    final title = winner == null
+        ? '和棋'
+        : winner == PlaySide.red
+        ? '红方胜'
+        : '黑方胜';
+    await showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      showDragHandle: false,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // board (with border)
-              // Image.asset('assets/skins/woods/board.jpg'),
-              theme.buildBoard(context),
-              // padding is used to remove border
-              Padding(
-                padding: theme.boardPadding,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: (TapUpDetails tap) {
-                    final bloc = context.read<ChessBloc>();
-                    final loc = tap.localPosition;
-                    final position = theme.hitTest(loc);
-                    if (position == null) return;
-                    debugPrint('tap: ${tap.localPosition}, $position');
-                    bloc.add(ChessEventBoardTap(position));
-                  },
-                  child: Stack(
-                    children: [
-                      /// last move
-                      if (state.lastMove != null) ...[
-                        Align(
-                          alignment: theme.getAlignment(state.lastMove!.srcPos),
-                          child: theme.buildMovePrint(context, true),
-                        ),
-                        Align(
-                          alignment: theme.getAlignment(state.lastMove!.dstPos),
-                          child: theme.buildMovePrint(context, false),
-                        ),
-                      ],
-
-                      if (state.animeMove != null)
-                        Align(
-                          alignment:
-                              theme.getAlignment(state.animeMove!.srcPos),
-                          child: theme.buildMovePrint(context, true),
-                        ),
-
-                      if (state.animeMoveInvalid != null)
-                        Align(
-                          alignment: theme
-                              .getAlignment(state.animeMoveInvalid!.srcPos),
-                          child: theme.buildMovePrint(context, true),
-                        ),
-
-                      // chess
-                      ...board.pcPairs.map((p) {
-                        int sq = p.sq;
-
-                        if (state.animeMoveInvalid?.sqSrc == sq ||
-                            state.animeMove?.sqSrc == sq) {
-                          return const SizedBox();
-                        }
-
-                        Widget child;
-                        if (state.selected?.sq == p.sq) {
-                          child = theme.buildSelectedPiece(context, p.piece);
-                        } else {
-                          child = theme.buildPiece(context, p.piece);
-                        }
-
-                        return Align(
-                          alignment: theme.getAlignment(p.pos),
-                          child: child,
-                        );
-                      }).toList(),
-
-                      /// available move actions
-                      if (state.selectedMoves != null)
-                        ...state.selectedMoves!.map((mv) {
-                          return Align(
-                            alignment: theme.getAlignment(mv.dstPos),
-                            child: theme.buildPieceMask(context),
-                          );
-                        }),
-
-                      /// anime invalid move
-                      if (state.animeMoveInvalid != null)
-                        AnimatedInvalidMove(
-                          begin: theme
-                              .getAlignment(state.animeMoveInvalid!.srcPos),
-                          end: theme
-                              .getAlignment(state.animeMoveInvalid!.dstPos),
-                          child: theme.buildPiece(
-                            context,
-                            state.board
-                                .getPiece(state.animeMoveInvalid!.sqSrc)!,
-                          ),
-                          onEnd: () => context
-                              .read<ChessBloc>()
-                              .add(const ChessEventMoveEnd()),
-                        ),
-
-                      /// anime move
-                      if (state.animeMove != null &&
-                          state.board.getPiece(state.animeMove!.sqSrc) != null)
-                        AnimatedMove(
-                          begin: theme.getAlignment(state.animeMove!.srcPos),
-                          end: theme.getAlignment(state.animeMove!.dstPos),
-                          child: theme.buildPiece(
-                            context,
-                            state.board.getPiece(state.animeMove!.sqSrc)!,
-                          ),
-                          onEnd: () => context
-                              .read<ChessBloc>()
-                              .add(const ChessEventMoveEnd()),
-                        ),
-
-                      /// hints
-                    ],
+              const Icon(Icons.emoji_events_outlined, size: 42),
+              const SizedBox(height: 12),
+              Text(title, style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text('棋局已自动保存', style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        Navigator.maybePop(context);
+                      },
+                      icon: const Icon(Icons.home_outlined),
+                      label: const Text('返回首页'),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChessPage(playMode: state.playMode),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('再来一局'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -350,4 +354,1181 @@ class ChessBoard extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _requestExit() async {
+    final state = context.read<ChessBloc>().state;
+    if (state.board.lastMoves.isEmpty || state.status == BoardStatus.finished) {
+      Navigator.maybePop(context);
+      return;
+    }
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('返回首页？'),
+        content: const Text('当前棋局已经自动保存，下次可以继续。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('继续对局'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('返回首页'),
+          ),
+        ],
+      ),
+    );
+    if (leave == true && mounted) Navigator.maybePop(context);
+  }
+
+  Future<void> _requestNewGame(ChessState state) async {
+    var confirmed = true;
+    if (state.board.lastMoves.isNotEmpty &&
+        state.status != BoardStatus.finished) {
+      confirmed =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('开始新对局？'),
+              content: const Text('当前棋局会保留在本机，新对局将从初始局面开始。'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('开始新局'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+    }
+    if (!confirmed || !mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => ChessPage(playMode: state.playMode)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final disableAnimations =
+        _settings.motionPreference == MotionPreference.reduced
+        ? true
+        : _settings.motionPreference == MotionPreference.full
+        ? false
+        : mediaQuery.disableAnimations;
+    return MediaQuery(
+      data: mediaQuery.copyWith(disableAnimations: disableAnimations),
+      child: BlocListener<ChessBloc, ChessState>(
+        listenWhen: (previous, current) =>
+            previous.status != current.status ||
+            previous.playEffect != current.playEffect ||
+            previous.winningSide != current.winningSide,
+        listener: _handleState,
+        child: BlocBuilder<ChessBloc, ChessState>(
+          builder: (context, state) {
+            return Scaffold(
+              backgroundColor: _GameColors.canvas,
+              body: LayoutBuilder(
+                builder: (context, constraints) {
+                  final desktop = constraints.maxWidth >= 720;
+                  return Stack(
+                    children: [
+                      Positioned.fill(
+                        child: desktop
+                            ? const _DesktopBackdrop()
+                            : const ColoredBox(color: _GameColors.mobileCanvas),
+                      ),
+                      SafeArea(
+                        child: desktop
+                            ? _DesktopGameLayout(
+                                state: state,
+                                inspectorTab: _inspectorTab,
+                                onInspectorTabChanged: (value) {
+                                  setState(() => _inspectorTab = value);
+                                },
+                                onBack: _requestExit,
+                                onSettings: _showSettings,
+                                onMenu: _showGameMenu,
+                              )
+                            : _MobileGameLayout(
+                                state: state,
+                                onBack: _requestExit,
+                                onSettings: _showSettings,
+                                onMenu: _showGameMenu,
+                                onNotation: _showNotation,
+                              ),
+                      ),
+                      if (state.status == BoardStatus.paused)
+                        _PauseOverlay(
+                          onResume: () => context.read<ChessBloc>().add(
+                            const ChessEventResume(),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showNotation() async {
+    final state = context.read<ChessBloc>().state;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: .68,
+        child: _MoveHistory(state: state),
+      ),
+    );
+  }
+
+  Future<void> _showGameMenu() async {
+    final bloc = context.read<ChessBloc>();
+    final state = bloc.state;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(
+                  state.status == BoardStatus.paused
+                      ? Icons.play_arrow
+                      : Icons.pause,
+                ),
+                title: Text(
+                  state.status == BoardStatus.paused ? '继续对局' : '暂停对局',
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  bloc.add(
+                    state.status == BoardStatus.paused
+                        ? const ChessEventResume()
+                        : const ChessEventPause(),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('主题与声音'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showSettings();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('新对局'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await _requestNewGame(state);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag_outlined, color: Colors.red),
+                title: const Text('认输', style: TextStyle(color: Colors.red)),
+                enabled: state.status != BoardStatus.finished,
+                onTap: () async {
+                  final resign = await showDialog<bool>(
+                    context: sheetContext,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('确认认输？'),
+                      content: const Text('认输后本局将立即结束。'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(dialogContext, true),
+                          child: const Text('认输'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (resign == true && mounted) {
+                    Navigator.pop(sheetContext);
+                    bloc.add(const ChessEventResign());
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          Future<void> update(GameSettings next) async {
+            setSheetState(() => _settings = next);
+            await _saveSettings(next);
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('主题与反馈', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 20),
+                  Text('棋盘主题', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 10),
+                  SegmentedButton<String>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: 'assets/skins/maple/config.json',
+                        label: Text('浅色枫木'),
+                      ),
+                      ButtonSegment(
+                        value: 'assets/skins/night/config.json',
+                        label: Text('夜间胡桃木'),
+                      ),
+                      ButtonSegment(
+                        value: 'assets/skins/woods/config.json',
+                        label: Text('经典'),
+                      ),
+                    ],
+                    selected: {_settings.themeConfigAsset},
+                    onSelectionChanged: (selection) {
+                      final asset = selection.first;
+                      context.read<ThemeBloc>().add(ThemeAssetRequested(asset));
+                      update(_settings.copyWith(themeConfigAsset: asset));
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('对局音效'),
+                    subtitle: const Text('走子、吃子、将军与结果反馈'),
+                    value: _settings.soundEnabled,
+                    onChanged: (value) =>
+                        update(_settings.copyWith(soundEnabled: value)),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('背景音乐'),
+                    subtitle: const Text('音乐素材准备中'),
+                    value: false,
+                    onChanged: null,
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('触觉反馈'),
+                    subtitle: const Text('移动端落子与非法操作反馈'),
+                    value: _settings.hapticsEnabled,
+                    onChanged: (value) =>
+                        update(_settings.copyWith(hapticsEnabled: value)),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('动态效果', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 10),
+                  SegmentedButton<MotionPreference>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: MotionPreference.system,
+                        label: Text('跟随系统'),
+                      ),
+                      ButtonSegment(
+                        value: MotionPreference.full,
+                        label: Text('完整'),
+                      ),
+                      ButtonSegment(
+                        value: MotionPreference.reduced,
+                        label: Text('精简'),
+                      ),
+                    ],
+                    selected: {_settings.motionPreference},
+                    onSelectionChanged: (selection) => update(
+                      _settings.copyWith(motionPreference: selection.first),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MobileGameLayout extends StatelessWidget {
+  const _MobileGameLayout({
+    required this.state,
+    required this.onBack,
+    required this.onSettings,
+    required this.onMenu,
+    required this.onNotation,
+  });
+
+  final ChessState state;
+  final VoidCallback onBack;
+  final VoidCallback onSettings;
+  final VoidCallback onMenu;
+  final VoidCallback onNotation;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _GameTopBar(
+          title: _modeTitle(state.playMode),
+          onBack: onBack,
+          onSettings: onSettings,
+          onMenu: onMenu,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+          child: _PlayerPanel(
+            side: PlaySide.black,
+            state: state,
+            compact: true,
+          ),
+        ),
+        const Expanded(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: ChessBoard(),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: _PlayerPanel(side: PlaySide.red, state: state, compact: true),
+        ),
+        _GameCommandBar(state: state, onNotation: onNotation, onMenu: onMenu),
+      ],
+    );
+  }
+}
+
+class _DesktopGameLayout extends StatelessWidget {
+  const _DesktopGameLayout({
+    required this.state,
+    required this.inspectorTab,
+    required this.onInspectorTabChanged,
+    required this.onBack,
+    required this.onSettings,
+    required this.onMenu,
+  });
+
+  final ChessState state;
+  final int inspectorTab;
+  final ValueChanged<int> onInspectorTabChanged;
+  final VoidCallback onBack;
+  final VoidCallback onSettings;
+  final VoidCallback onMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _GameTopBar(
+          title: _modeTitle(state.playMode),
+          onBack: onBack,
+          onSettings: onSettings,
+          onMenu: onMenu,
+          desktop: true,
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 18),
+                      child: ChessBoard(),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 360,
+                  child: _DesktopInspector(
+                    state: state,
+                    tab: inspectorTab,
+                    onTabChanged: onInspectorTabChanged,
+                    onSettings: onSettings,
+                    onMenu: onMenu,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GameTopBar extends StatelessWidget {
+  const _GameTopBar({
+    required this.title,
+    required this.onBack,
+    required this.onSettings,
+    required this.onMenu,
+    this.desktop = false,
+  });
+
+  final String title;
+  final VoidCallback onBack;
+  final VoidCallback onSettings;
+  final VoidCallback onMenu;
+  final bool desktop;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassSurface(
+      borderRadius: desktop
+          ? BorderRadius.zero
+          : const BorderRadius.vertical(bottom: Radius.circular(8)),
+      child: SizedBox(
+        height: desktop ? 56 : 58,
+        child: Row(
+          children: [
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: '返回首页',
+              onPressed: onBack,
+              icon: const Icon(Icons.arrow_back_ios_new),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.grid_4x4, size: 20),
+            const SizedBox(width: 10),
+            Text('中国象棋', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(width: 12),
+            Container(width: 1, height: 20, color: _GameColors.border),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: _GameColors.muted),
+              ),
+            ),
+            IconButton(
+              tooltip: '主题与声音',
+              onPressed: onSettings,
+              icon: const Icon(Icons.volume_up_outlined),
+            ),
+            IconButton(
+              tooltip: '更多',
+              onPressed: onMenu,
+              icon: const Icon(Icons.more_horiz),
+            ),
+            const SizedBox(width: 6),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerPanel extends StatelessWidget {
+  const _PlayerPanel({
+    required this.side,
+    required this.state,
+    this.compact = false,
+  });
+
+  final PlaySide side;
+  final ChessState state;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.watch<ThemeBloc>().state.theme;
+    final active =
+        state.board.innerBoard.sdPlayer == side.index &&
+        state.status != BoardStatus.finished;
+    final isPlayer =
+        state.playMode == PlayMode.withSelf || side == state.playSide;
+    final thinking = state.status == BoardStatus.thinking && !isPlayer;
+    final piece = ChessPiece(side == PlaySide.red ? 8 : 16);
+    return _GlassSurface(
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 12 : 16,
+          vertical: compact ? 9 : 14,
+        ),
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: compact ? 46 : 58,
+              child: FittedBox(child: theme.buildPiece(context, piece)),
+            ),
+            SizedBox(width: compact ? 10 : 14),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    state.playMode == PlayMode.withAI && !isPlayer
+                        ? '电脑 · 普通'
+                        : side == PlaySide.red
+                        ? '红方 · 我'
+                        : '黑方 · 本地',
+                    style:
+                        (compact
+                                ? Theme.of(context).textTheme.titleSmall
+                                : Theme.of(context).textTheme.titleMedium)
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: active
+                              ? _GameColors.jade
+                              : _GameColors.inactive,
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          thinking
+                              ? '思考中'
+                              : active
+                              ? '轮到${isPlayer
+                                    ? '你'
+                                    : side == PlaySide.red
+                                    ? '红方'
+                                    : '黑方'}'
+                              : '等待中',
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: active
+                                    ? _GameColors.jade
+                                    : _GameColors.muted,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '不限时',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: _GameColors.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopInspector extends StatelessWidget {
+  const _DesktopInspector({
+    required this.state,
+    required this.tab,
+    required this.onTabChanged,
+    required this.onSettings,
+    required this.onMenu,
+  });
+
+  final ChessState state;
+  final int tab;
+  final ValueChanged<int> onTabChanged;
+  final VoidCallback onSettings;
+  final VoidCallback onMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassSurface(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            _PlayerPanel(side: PlaySide.black, state: state),
+            const SizedBox(height: 12),
+            SegmentedButton<int>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: 0,
+                  icon: Icon(Icons.list_alt),
+                  label: Text('棋谱'),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  icon: Icon(Icons.tune),
+                  label: Text('局面'),
+                ),
+              ],
+              selected: {tab},
+              onSelectionChanged: (selection) => onTabChanged(selection.first),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: tab == 0
+                  ? _MoveHistory(state: state, embedded: true)
+                  : _PositionSummary(state: state),
+            ),
+            const SizedBox(height: 12),
+            _PlayerPanel(side: PlaySide.red, state: state),
+            const SizedBox(height: 10),
+            _GameCommandBar(
+              state: state,
+              onNotation: () => onTabChanged(0),
+              onMenu: onMenu,
+              desktop: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MoveHistory extends StatelessWidget {
+  const _MoveHistory({required this.state, this.embedded = false});
+
+  final ChessState state;
+  final bool embedded;
+
+  @override
+  Widget build(BuildContext context) {
+    final moves = state.board.lastMoves;
+    final content = moves.isEmpty
+        ? const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.list_alt, size: 34, color: _GameColors.muted),
+                SizedBox(height: 10),
+                Text('棋谱将在落子后显示'),
+              ],
+            ),
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            itemCount: (moves.length + 1) ~/ 2,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final redIndex = index * 2;
+              final blackIndex = redIndex + 1;
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(width: 32, child: Text('${index + 1}')),
+                    Expanded(child: Text(_moveLabel(moves[redIndex]))),
+                    Expanded(
+                      child: Text(
+                        blackIndex < moves.length
+                            ? _moveLabel(moves[blackIndex])
+                            : '…',
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+    if (embedded) return content;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('本局棋谱', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          Expanded(child: content),
+        ],
+      ),
+    );
+  }
+}
+
+class _PositionSummary extends StatelessWidget {
+  const _PositionSummary({required this.state});
+
+  final ChessState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final turn = state.board.innerBoard.sdPlayer == PlaySide.red.index
+        ? '红方'
+        : '黑方';
+    final status = _boardStatusLabel(state.status);
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+          leading: const Icon(Icons.adjust),
+          title: const Text('当前回合'),
+          trailing: Text(turn),
+        ),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+          leading: const Icon(Icons.info_outline),
+          title: const Text('对局状态'),
+          trailing: Text(status),
+        ),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+          leading: const Icon(Icons.save_outlined),
+          title: const Text('本地存档'),
+          trailing: const Text('已自动保存'),
+        ),
+      ],
+    );
+  }
+}
+
+class _GameCommandBar extends StatelessWidget {
+  const _GameCommandBar({
+    required this.state,
+    required this.onNotation,
+    required this.onMenu,
+    this.desktop = false,
+  });
+
+  final ChessState state;
+  final VoidCallback onNotation;
+  final VoidCallback onMenu;
+  final bool desktop;
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = context.read<ChessBloc>();
+    final canUndo =
+        (state.status == BoardStatus.idle ||
+            state.status == BoardStatus.finished) &&
+        (state.playMode == PlayMode.withSelf
+            ? state.board.lastMoves.isNotEmpty
+            : state.board.lastMoves.length > 1);
+    final canHint =
+        state.playMode == PlayMode.withAI &&
+        state.status == BoardStatus.idle &&
+        state.board.isTurn(state.playSide);
+    final commands = [
+      _GameCommand(
+        label: '悔棋',
+        icon: Icons.undo,
+        onPressed: canUndo ? () => bloc.add(const ChessEventUndo()) : null,
+      ),
+      _GameCommand(
+        label: '提示',
+        icon: Icons.lightbulb_outline,
+        active: state.hintMoves?.isNotEmpty == true,
+        onPressed: canHint ? () => bloc.add(const ChessEventGetHint()) : null,
+      ),
+      _GameCommand(label: '棋谱', icon: Icons.list_alt, onPressed: onNotation),
+      _GameCommand(label: '菜单', icon: Icons.menu, onPressed: onMenu),
+    ];
+    return _GlassSurface(
+      borderRadius: desktop
+          ? const BorderRadius.all(Radius.circular(8))
+          : const BorderRadius.vertical(top: Radius.circular(8)),
+      child: SizedBox(
+        height: desktop ? 68 : 72,
+        child: Row(
+          children: commands
+              .map(
+                (command) => Expanded(child: _CommandButton(command: command)),
+              )
+              .toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _GameCommand {
+  const _GameCommand({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.active = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool active;
+}
+
+class _CommandButton extends StatelessWidget {
+  const _CommandButton({required this.command});
+
+  final _GameCommand command;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = command.onPressed == null
+        ? _GameColors.inactive
+        : command.active
+        ? _GameColors.jade
+        : _GameColors.ink;
+    return Tooltip(
+      message: command.label,
+      child: InkWell(
+        onTap: command.onPressed,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(command.icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              command.label,
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PauseOverlay extends StatelessWidget {
+  const _PauseOverlay({required this.onResume});
+
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: .58),
+        child: Center(
+          child: _GlassSurface(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.pause_circle_outline, size: 44),
+                  const SizedBox(height: 12),
+                  Text('对局已暂停', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: onResume,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('继续对局'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EffectLabel extends StatelessWidget {
+  const _EffectLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: _GameColors.ink.withValues(alpha: .82),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassSurface extends StatelessWidget {
+  const _GlassSurface({
+    required this.child,
+    this.borderRadius = const BorderRadius.all(Radius.circular(8)),
+  });
+
+  final Widget child;
+  final BorderRadius borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _GameColors.surface.withValues(alpha: .88),
+            borderRadius: borderRadius,
+            border: Border.all(color: _GameColors.border),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopBackdrop extends StatelessWidget {
+  const _DesktopBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.asset(
+          'assets/skins/night/background-desktop.png',
+          fit: BoxFit.cover,
+        ),
+        ColoredBox(color: _GameColors.canvas.withValues(alpha: .72)),
+      ],
+    );
+  }
+}
+
+class ChessBoard extends StatelessWidget {
+  const ChessBoard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.select((ThemeBloc bloc) => bloc.state.theme);
+    final state = context.select((ChessBloc bloc) => bloc.state);
+    final board = state.board;
+    final locked = state.status != BoardStatus.idle;
+
+    return Semantics(
+      label: '中国象棋棋盘',
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: theme.boardSize.width / theme.boardSize.height,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: SizedBox(
+              height: theme.boardSize.height,
+              width: theme.boardSize.width,
+              child: Stack(
+                children: [
+                  theme.buildBoard(context),
+                  Padding(
+                    padding: theme.boardPadding,
+                    child: IgnorePointer(
+                      ignoring: locked,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: (tap) {
+                          final position = theme.hitTest(tap.localPosition);
+                          if (position != null) {
+                            context.read<ChessBloc>().add(
+                              ChessEventBoardTap(position),
+                            );
+                          }
+                        },
+                        child: Stack(
+                          children: [
+                            if (state.lastMove != null) ...[
+                              Align(
+                                alignment: theme.getAlignment(
+                                  state.lastMove!.srcPos,
+                                ),
+                                child: theme.buildMovePrint(context, true),
+                              ),
+                              Align(
+                                alignment: theme.getAlignment(
+                                  state.lastMove!.dstPos,
+                                ),
+                                child: theme.buildMovePrint(context, false),
+                              ),
+                            ],
+                            if (state.hintMoves?.isNotEmpty == true) ...[
+                              Align(
+                                alignment: theme.getAlignment(
+                                  state.hintMoves!.first.srcPos,
+                                ),
+                                child: theme.buildMovePrint(context, true),
+                              ),
+                              Align(
+                                alignment: theme.getAlignment(
+                                  state.hintMoves!.first.dstPos,
+                                ),
+                                child: theme.buildPieceMask(context),
+                              ),
+                            ],
+                            if (state.animeMove != null)
+                              Align(
+                                alignment: theme.getAlignment(
+                                  state.animeMove!.srcPos,
+                                ),
+                                child: theme.buildMovePrint(context, true),
+                              ),
+                            ...board.pcPairs.map((pair) {
+                              if (state.animeMoveInvalid?.sqSrc == pair.sq ||
+                                  state.animeMove?.sqSrc == pair.sq) {
+                                return const SizedBox.shrink();
+                              }
+                              return Align(
+                                alignment: theme.getAlignment(pair.pos),
+                                child: state.selected?.sq == pair.sq
+                                    ? theme.buildSelectedPiece(
+                                        context,
+                                        pair.piece,
+                                      )
+                                    : theme.buildPiece(context, pair.piece),
+                              );
+                            }),
+                            if (state.selectedMoves != null)
+                              ...state.selectedMoves!.map(
+                                (move) => Align(
+                                  alignment: theme.getAlignment(move.dstPos),
+                                  child: theme.buildPieceMask(context),
+                                ),
+                              ),
+                            if (state.animeMoveInvalid != null)
+                              AnimatedInvalidMove(
+                                begin: theme.getAlignment(
+                                  state.animeMoveInvalid!.srcPos,
+                                ),
+                                end: theme.getAlignment(
+                                  state.animeMoveInvalid!.dstPos,
+                                ),
+                                child: theme.buildPiece(
+                                  context,
+                                  state.board.getPiece(
+                                    state.animeMoveInvalid!.sqSrc,
+                                  )!,
+                                ),
+                                onEnd: () => context.read<ChessBloc>().add(
+                                  ChessEventMoveEnd(state.animeMoveInvalid),
+                                ),
+                              ),
+                            if (state.animeMove != null &&
+                                state.board.getPiece(state.animeMove!.sqSrc) !=
+                                    null)
+                              AnimatedMove(
+                                begin: theme.getAlignment(
+                                  state.animeMove!.srcPos,
+                                ),
+                                end: theme.getAlignment(
+                                  state.animeMove!.dstPos,
+                                ),
+                                child: theme.buildPiece(
+                                  context,
+                                  state.board.getPiece(state.animeMove!.sqSrc)!,
+                                ),
+                                onEnd: () => context.read<ChessBloc>().add(
+                                  ChessEventMoveEnd(state.animeMove),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _modeTitle(PlayMode mode) {
+  return mode == PlayMode.withSelf ? '本地双人' : '人机对局';
+}
+
+String _playEffectLabel(PlayEffect effect) {
+  switch (effect) {
+    case PlayEffect.check:
+      return '将军';
+    case PlayEffect.eat:
+      return '吃子';
+    case PlayEffect.mate:
+      return '绝杀';
+  }
+}
+
+String _boardStatusLabel(BoardStatus status) {
+  switch (status) {
+    case BoardStatus.thinking:
+      return '电脑思考中';
+    case BoardStatus.busy:
+      return '棋子移动中';
+    case BoardStatus.paused:
+      return '已暂停';
+    case BoardStatus.finished:
+      return '棋局结束';
+    case BoardStatus.initialized:
+    case BoardStatus.idle:
+      return '等待落子';
+  }
+}
+
+String _moveLabel(MovePos move) {
+  final srcFile = SquareBoard.getFileX(move.sqSrc) - SquareBoard.FILE_LEFT + 1;
+  final srcRank = SquareBoard.getRankY(move.sqSrc) - SquareBoard.RANK_TOP + 1;
+  final dstFile = SquareBoard.getFileX(move.sqDst) - SquareBoard.FILE_LEFT + 1;
+  final dstRank = SquareBoard.getRankY(move.sqDst) - SquareBoard.RANK_TOP + 1;
+  return '$srcFile,$srcRank → $dstFile,$dstRank';
+}
+
+class _GameColors {
+  const _GameColors._();
+
+  static const canvas = Color(0xFF171A1A);
+  static const mobileCanvas = Color(0xFFF3F1EC);
+  static const surface = Color(0xFFF9F8F5);
+  static const border = Color(0x33939B98);
+  static const ink = Color(0xFF202625);
+  static const muted = Color(0xFF68716E);
+  static const inactive = Color(0xFF9EA5A2);
+  static const jade = Color(0xFF2D9B73);
 }

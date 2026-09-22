@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_cchess/chess/theme/motion_spec.dart';
 
 class AnimatedMove extends StatelessWidget {
   const AnimatedMove({
@@ -6,7 +7,7 @@ class AnimatedMove extends StatelessWidget {
     required this.begin,
     required this.end,
     required this.child,
-    this.duration = const Duration(milliseconds: 300),
+    this.duration = MotionSpec.legalMove,
     this.onEnd,
   }) : super(key: key);
 
@@ -20,9 +21,9 @@ class AnimatedMove extends StatelessWidget {
   Widget build(BuildContext context) {
     return TweenAnimationBuilder(
       onEnd: onEnd,
-      curve: Curves.linearToEaseOut,
+      curve: MotionSpec.legalMoveCurve,
       tween: AlignmentTween(begin: begin, end: end),
-      duration: duration,
+      duration: MotionSpec.durationOf(context, duration),
       builder: (BuildContext context, Alignment value, Widget? child) {
         return Align(
           alignment: value,
