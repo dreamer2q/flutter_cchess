@@ -1,16 +1,36 @@
-# flutter_cchess
+# Flutter Chinese Chess
 
-A new Flutter project.
+`flutter_cchess` is a Flutter Chinese chess app with BLoC-based game state,
+board themes, timers, and a native chess engine.
 
-## Getting Started
+## Requirements
 
-This project is a starting point for a Flutter application.
+- Flutter SDK managed by FVM (`fvm flutter`)
+- Java 17 and Android SDK 36 for Android builds
+- Xcode with an installed iOS platform for iOS builds
 
-A few resources to get you started if this is your first Flutter project:
+## Quick Start
 
-- [Lab: Write your first Flutter app](https://flutter.dev/docs/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://flutter.dev/docs/cookbook)
+```sh
+fvm flutter pub get
+fvm flutter run
+```
 
-For help getting started with Flutter, view our
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Useful checks and builds:
+
+```sh
+fvm flutter analyze --no-fatal-infos
+fvm flutter test
+fvm flutter build apk --debug
+fvm flutter build ios --debug --no-codesign
+fvm flutter build macos --debug
+```
+
+The supported runtime targets are Android, iOS, and macOS. Web is not currently
+supported because the chess engine uses `dart:ffi`.
+
+## Project Guide
+
+- [`AGENTS.md`](AGENTS.md) contains contributor and AI-agent instructions.
+- [`docs/architecture.md`](docs/architecture.md) describes runtime flow,
+  state ownership, and platform boundaries.
