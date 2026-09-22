@@ -13,6 +13,10 @@ abstract class GameRepository {
   /// Returns the most recently saved game, or null when no game exists.
   Future<GameRecord?> getCurrent();
 
+  /// Returns the newest unfinished game instead of allowing a completed game
+  /// to hide an older resumable one.
+  Future<GameRecord?> getLatestInProgress();
+
   Future<List<GameRecord>> list();
 
   Future<void> delete(String id);
@@ -31,18 +35,23 @@ class SharedPreferencesGameRepository implements GameRepository {
   static const storageKey = 'flutter_cchess.game_records.v1';
 
   final SharedPreferences _preferences;
+  Future<void> _mutationTail = Future<void>.value();
 
   @override
   Future<void> save(GameRecord record) async {
-    final records = await list();
-    final index = records.indexWhere((item) => item.id == record.id);
-    if (index == -1) {
-      records.add(record);
-    } else {
-      records[index] = record;
-    }
-    records.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    await _write(records);
+    final operation = _mutationTail.then((_) async {
+      final records = await list();
+      final index = records.indexWhere((item) => item.id == record.id);
+      if (index == -1) {
+        records.add(record);
+      } else {
+        records[index] = record;
+      }
+      records.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      await _write(records);
+    });
+    _mutationTail = operation.catchError((Object _) {});
+    await operation;
   }
 
   @override
@@ -57,6 +66,14 @@ class SharedPreferencesGameRepository implements GameRepository {
   Future<GameRecord?> getCurrent() async {
     final records = await list();
     return records.isEmpty ? null : records.first;
+  }
+
+  @override
+  Future<GameRecord?> getLatestInProgress() async {
+    for (final record in await list()) {
+      if (record.result == GameResult.inProgress) return record;
+    }
+    return null;
   }
 
   @override
@@ -85,13 +102,23 @@ class SharedPreferencesGameRepository implements GameRepository {
 
   @override
   Future<void> delete(String id) async {
-    final records = await list()
-      ..removeWhere((record) => record.id == id);
-    await _write(records);
+    final operation = _mutationTail.then((_) async {
+      final records = await list()
+        ..removeWhere((record) => record.id == id);
+      await _write(records);
+    });
+    _mutationTail = operation.catchError((Object _) {});
+    await operation;
   }
 
   @override
-  Future<void> clear() => _preferences.remove(storageKey);
+  Future<void> clear() async {
+    final operation = _mutationTail.then(
+      (_) => _preferences.remove(storageKey),
+    );
+    _mutationTail = operation.then<void>((_) {}).catchError((Object _) {});
+    await operation;
+  }
 
   Future<void> _write(List<GameRecord> records) async {
     await _preferences.setString(
@@ -115,6 +142,14 @@ class InMemoryGameRepository implements GameRepository {
   Future<GameRecord?> getCurrent() async {
     if (_records.isEmpty) return null;
     return (await list()).first;
+  }
+
+  @override
+  Future<GameRecord?> getLatestInProgress() async {
+    for (final record in await list()) {
+      if (record.result == GameResult.inProgress) return record;
+    }
+    return null;
   }
 
   @override

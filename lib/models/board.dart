@@ -41,7 +41,7 @@ class BoardMoveAction extends BoardAction {
 
 class Board extends Equatable {
   Board(this.actions, {this.initialSideToMove = 0})
-      : innerBoard = SquareBoard() {
+    : innerBoard = SquareBoard() {
     innerBoard.sdPlayer = initialSideToMove;
     for (final ac in actions) {
       if (ac is BoardPutAction) {
@@ -65,10 +65,7 @@ class Board extends Equatable {
     for (int sq = 0; sq < 256; sq++) {
       final int pc = innerBoard.ucpcSquares[sq];
       if (pc != 0) {
-        pairs.add(PiecePair(
-          ChessPiece(pc),
-          PiecePos(sq),
-        ));
+        pairs.add(PiecePair(ChessPiece(pc), PiecePos(sq)));
       }
     }
     return pairs;
@@ -85,7 +82,10 @@ class Board extends Equatable {
     if (sq != 0) {
       mvs.removeWhere((mv) => sq != SquareBoard.getSrc(mv));
     }
-    return mvs.map((mv) => MovePos.mv(mv)).toList();
+    return mvs
+        .map((mv) => MovePos.mv(mv))
+        .where(isMovable)
+        .toList(growable: false);
   }
 
   bool isMovable(MovePos move) {
@@ -108,13 +108,8 @@ class Board extends Equatable {
         (pc.sideTag == 1 ? 8 : 16);
   }
 
-  Board copyWith({
-    BuiltList<BoardAction>? actions,
-  }) {
-    return Board(
-      actions ?? this.actions,
-      initialSideToMove: initialSideToMove,
-    );
+  Board copyWith({BuiltList<BoardAction>? actions}) {
+    return Board(actions ?? this.actions, initialSideToMove: initialSideToMove);
   }
 
   @override

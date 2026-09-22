@@ -7,6 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_cchess/audio/audio.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
+import 'package:flutter_cchess/chess/presentation/game_presentation_coordinator.dart';
+import 'package:flutter_cchess/chess/widget/animated_captured_piece.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
@@ -19,6 +21,7 @@ import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
 
 import '../bloc/chess_bloc.dart';
+import 'game_layout_policy.dart';
 
 class ChessPage extends StatefulWidget {
   const ChessPage({
@@ -49,7 +52,9 @@ class _ChessPageState extends State<ChessPage> {
     if (record != null) {
       for (final move in record.moves) {
         final movePos = MovePos(move.from, move.to);
-        if (!initialBoard.isMovable(movePos)) break;
+        if (!initialBoard.isMovable(movePos)) {
+          throw const FormatException('Saved game contains an illegal move.');
+        }
         initialBoard = initialBoard.copyWith(
           actions: initialBoard.actions.rebuild(
             (actions) => actions..add(BoardMoveAction(movePos.mv)),
@@ -173,6 +178,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   late GameSettings _settings = widget.initialSettings;
   late final AudioService _audioService;
   late final GameAudioController _audioController;
+  late final GamePresentationCoordinator _presentationCoordinator;
   ChessState? _previousState;
   var _inspectorTab = 0;
   var _resultShown = false;
@@ -182,6 +188,10 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     super.initState();
     _audioService = AudioplayersAudioService(enabled: _settings.soundEnabled);
     _audioController = GameAudioController(service: _audioService);
+    _presentationCoordinator = GamePresentationCoordinator(
+      audioController: _audioController,
+      haptic: _performHaptic,
+    );
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -203,11 +213,12 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!mounted) return;
     if (state == AppLifecycleState.resumed) {
+      _presentationCoordinator.resume();
       context.read<ChessBloc>().add(const ChessEventResume());
       return;
     }
     context.read<ChessBloc>().add(const ChessEventPause());
-    unawaited(_audioController.stopAll());
+    unawaited(_presentationCoordinator.suspend());
   }
 
   Future<void> _saveSettings(GameSettings settings) async {
@@ -222,33 +233,29 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   void _handleState(BuildContext context, ChessState state) {
     final previous = _previousState;
     _previousState = state;
-
-    if (state.animeMoveInvalid != null &&
-        previous?.animeMoveInvalid != state.animeMoveInvalid) {
-      _playCue(
-        GameAudioCue.illegalMove,
-        'illegal-${state.animeMoveInvalid!.mv}',
-      );
-      if (_settings.hapticsEnabled) HapticFeedback.lightImpact();
-    }
-
-    if (previous?.status == BoardStatus.busy &&
-        state.status != BoardStatus.busy &&
-        state.animeMove == null) {
-      _playCommittedMoveFeedback(state);
-    } else if (state.status == BoardStatus.finished &&
-        previous?.status != BoardStatus.finished) {
-      _playResultFeedback(state);
-    }
-
-    if (state.playEffect != null && state.status != BoardStatus.busy) {
-      final label = _playEffectLabel(state.playEffect!);
-      AnimatedOverlay.show(
-        context: context,
-        child: _EffectLabel(label: label),
+    final completed = previous?.activePresentation;
+    final feedbackStarted =
+        completed != null &&
+        state.activePresentation?.id == completed.id &&
+        completed.stage == PresentationStage.animating &&
+        state.activePresentation?.stage == PresentationStage.feedback;
+    final removed =
+        completed != null &&
+        !state.presentations.any((effect) => effect.id == completed.id);
+    if (feedbackStarted ||
+        (removed && completed.stage == PresentationStage.animating)) {
+      final presented = state.activePresentation?.id == completed.id
+          ? state.activePresentation!
+          : completed;
+      unawaited(
+        _presentationCoordinator
+            .present(presented, state, hapticsEnabled: _settings.hapticsEnabled)
+            .catchError((Object _) {}),
       );
     }
-    if (state.status == BoardStatus.finished && !_resultShown) {
+    if (state.phase == GamePhase.finished &&
+        state.presentations.isEmpty &&
+        !_resultShown) {
       _resultShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showResult(state);
@@ -256,30 +263,15 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     }
   }
 
-  void _playCommittedMoveFeedback(ChessState state) {
-    if (state.status == BoardStatus.finished) {
-      _playResultFeedback(state);
-      return;
+  Future<void> _performHaptic(PresentationHapticKind kind) {
+    switch (kind) {
+      case PresentationHapticKind.light:
+        return HapticFeedback.selectionClick();
+      case PresentationHapticKind.medium:
+        return HapticFeedback.mediumImpact();
+      case PresentationHapticKind.result:
+        return HapticFeedback.heavyImpact();
     }
-    final cues = <GameAudioCue>[GameAudioCue.move];
-    if (state.playEffect == PlayEffect.eat) cues.add(GameAudioCue.capture);
-    if (state.playEffect == PlayEffect.check ||
-        state.playEffect == PlayEffect.mate) {
-      cues.add(GameAudioCue.check);
-    }
-    _playCues(cues, 'move-${state.board.lastMoves.length}');
-    if (_settings.hapticsEnabled) HapticFeedback.selectionClick();
-  }
-
-  void _playResultFeedback(ChessState state) {
-    final cue = state.playStatus == PlayStatus.draw
-        ? GameAudioCue.draw
-        : state.playMode == PlayMode.withAI &&
-              state.winningSide != state.playSide
-        ? GameAudioCue.loss
-        : GameAudioCue.win;
-    _playCue(cue, 'result-${state.board.lastMoves.length}');
-    if (_settings.hapticsEnabled) HapticFeedback.mediumImpact();
   }
 
   void _playCue(GameAudioCue cue, Object stepId) {
@@ -356,8 +348,11 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   }
 
   Future<void> _requestExit() async {
-    final state = context.read<ChessBloc>().state;
-    if (state.board.lastMoves.isEmpty || state.status == BoardStatus.finished) {
+    final bloc = context.read<ChessBloc>();
+    final state = bloc.state;
+    if (state.board.lastMoves.isEmpty || state.phase == GamePhase.finished) {
+      await bloc.flushPersistence();
+      if (!mounted) return;
       Navigator.maybePop(context);
       return;
     }
@@ -378,13 +373,15 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
         ],
       ),
     );
-    if (leave == true && mounted) Navigator.maybePop(context);
+    if (leave == true && mounted) {
+      await bloc.flushPersistence();
+      if (mounted) Navigator.maybePop(context);
+    }
   }
 
   Future<void> _requestNewGame(ChessState state) async {
     var confirmed = true;
-    if (state.board.lastMoves.isNotEmpty &&
-        state.status != BoardStatus.finished) {
+    if (state.board.lastMoves.isNotEmpty && state.phase != GamePhase.finished) {
       confirmed =
           await showDialog<bool>(
             context: context,
@@ -425,53 +422,95 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
       data: mediaQuery.copyWith(disableAnimations: disableAnimations),
       child: BlocListener<ChessBloc, ChessState>(
         listenWhen: (previous, current) =>
-            previous.status != current.status ||
-            previous.playEffect != current.playEffect ||
+            previous.phase != current.phase ||
+            previous.presentations != current.presentations ||
             previous.winningSide != current.winningSide,
         listener: _handleState,
         child: BlocBuilder<ChessBloc, ChessState>(
           builder: (context, state) {
-            return Scaffold(
-              backgroundColor: _GameColors.canvas,
-              body: LayoutBuilder(
-                builder: (context, constraints) {
-                  final desktop = constraints.maxWidth >= 720;
-                  return Stack(
-                    children: [
-                      Positioned.fill(
-                        child: desktop
-                            ? const _DesktopBackdrop()
-                            : const ColoredBox(color: _GameColors.mobileCanvas),
-                      ),
-                      SafeArea(
-                        child: desktop
-                            ? _DesktopGameLayout(
-                                state: state,
-                                inspectorTab: _inspectorTab,
-                                onInspectorTabChanged: (value) {
-                                  setState(() => _inspectorTab = value);
-                                },
-                                onBack: _requestExit,
-                                onSettings: _showSettings,
-                                onMenu: _showGameMenu,
-                              )
-                            : _MobileGameLayout(
-                                state: state,
-                                onBack: _requestExit,
-                                onSettings: _showSettings,
-                                onMenu: _showGameMenu,
-                                onNotation: _showNotation,
-                              ),
-                      ),
-                      if (state.status == BoardStatus.paused)
-                        _PauseOverlay(
-                          onResume: () => context.read<ChessBloc>().add(
-                            const ChessEventResume(),
-                          ),
+            return PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, result) {
+                if (!didPop) _requestExit();
+              },
+              child: Scaffold(
+                backgroundColor: _GameColors.canvas,
+                body: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final desktop = GameLayoutPolicy.useDesktop(
+                      constraints.maxWidth,
+                      constraints.maxHeight,
+                    );
+                    return Stack(
+                      children: [
+                        Positioned.fill(
+                          child: desktop
+                              ? const _DesktopBackdrop()
+                              : const ColoredBox(
+                                  color: _GameColors.mobileCanvas,
+                                ),
                         ),
-                    ],
-                  );
-                },
+                        SafeArea(
+                          child: desktop
+                              ? _DesktopGameLayout(
+                                  state: state,
+                                  inspectorTab: _inspectorTab,
+                                  onInspectorTabChanged: (value) {
+                                    setState(() => _inspectorTab = value);
+                                  },
+                                  onBack: _requestExit,
+                                  onSettings: _showSettings,
+                                  onMenu: _showGameMenu,
+                                )
+                              : _MobileGameLayout(
+                                  state: state,
+                                  onBack: _requestExit,
+                                  onSettings: _showSettings,
+                                  onMenu: _showGameMenu,
+                                  onNotation: _showNotation,
+                                ),
+                        ),
+                        if (state.phase == GamePhase.paused)
+                          _PauseOverlay(
+                            onResume: () => context.read<ChessBloc>().add(
+                              const ChessEventResume(),
+                            ),
+                          ),
+                        if (state.activePresentation?.tacticalEffect != null &&
+                            state.activePresentation?.stage ==
+                                PresentationStage.feedback)
+                          IgnorePointer(
+                            child: Center(
+                              child: AnimatedOverlay(
+                                key: ValueKey(state.activePresentation!.id),
+                                onEnd: () => context.read<ChessBloc>().add(
+                                  ChessEventPresentationAcknowledged(
+                                    state.activePresentation!.id,
+                                  ),
+                                ),
+                                child: _EffectLabel(
+                                  label: _playEffectLabel(
+                                    state.activePresentation!.tacticalEffect!,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (state.phase == GamePhase.failure)
+                          _FailureOverlay(
+                            message: state.failureMessage ?? '对局暂时无法继续。',
+                            canRetry: state.canRetryAi,
+                            onRetry: () => context.read<ChessBloc>().add(
+                              const ChessEventRetryAi(),
+                            ),
+                            onSwitchToLocal: () => context
+                                .read<ChessBloc>()
+                                .add(const ChessEventSwitchToLocal()),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
             );
           },
@@ -506,18 +545,25 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                leading: const Icon(Icons.flip_camera_android_outlined),
+                title: const Text('翻转棋盘'),
+                enabled: state.canFlip,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  bloc.add(const ChessEventFlipBoard());
+                },
+              ),
+              ListTile(
                 leading: Icon(
-                  state.status == BoardStatus.paused
+                  state.phase == GamePhase.paused
                       ? Icons.play_arrow
                       : Icons.pause,
                 ),
-                title: Text(
-                  state.status == BoardStatus.paused ? '继续对局' : '暂停对局',
-                ),
+                title: Text(state.phase == GamePhase.paused ? '继续对局' : '暂停对局'),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   bloc.add(
-                    state.status == BoardStatus.paused
+                    state.phase == GamePhase.paused
                         ? const ChessEventResume()
                         : const ChessEventPause(),
                   );
@@ -542,7 +588,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
               ListTile(
                 leading: const Icon(Icons.flag_outlined, color: Colors.red),
                 title: const Text('认输', style: TextStyle(color: Colors.red)),
-                enabled: state.status != BoardStatus.finished,
+                enabled: state.canResign,
                 onTap: () async {
                   final resign = await showDialog<bool>(
                     context: sheetContext,
@@ -745,44 +791,48 @@ class _DesktopGameLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _GameTopBar(
-          title: _modeTitle(state.playMode),
-          onBack: onBack,
-          onSettings: onSettings,
-          onMenu: onMenu,
-          desktop: true,
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.only(right: 18),
-                      child: ChessBoard(),
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        children: [
+          _GameTopBar(
+            title: _modeTitle(state.playMode),
+            onBack: onBack,
+            onSettings: onSettings,
+            onMenu: onMenu,
+            desktop: true,
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(right: 18),
+                        child: ChessBoard(),
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(
-                  width: 360,
-                  child: _DesktopInspector(
-                    state: state,
-                    tab: inspectorTab,
-                    onTabChanged: onInspectorTabChanged,
-                    onSettings: onSettings,
-                    onMenu: onMenu,
+                  SizedBox(
+                    width: GameLayoutPolicy.inspectorWidth(
+                      constraints.maxWidth,
+                    ),
+                    child: _DesktopInspector(
+                      state: state,
+                      tab: inspectorTab,
+                      onTabChanged: onInspectorTabChanged,
+                      onSettings: onSettings,
+                      onMenu: onMenu,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -867,10 +917,10 @@ class _PlayerPanel extends StatelessWidget {
     final theme = context.watch<ThemeBloc>().state.theme;
     final active =
         state.board.innerBoard.sdPlayer == side.index &&
-        state.status != BoardStatus.finished;
+        state.phase != GamePhase.finished;
     final isPlayer =
         state.playMode == PlayMode.withSelf || side == state.playSide;
-    final thinking = state.status == BoardStatus.thinking && !isPlayer;
+    final thinking = state.phase == GamePhase.aiThinking && !isPlayer;
     final piece = ChessPiece(side == PlaySide.red ? 8 : 16);
     return _GlassSurface(
       child: Padding(
@@ -1091,7 +1141,7 @@ class _PositionSummary extends StatelessWidget {
     final turn = state.board.innerBoard.sdPlayer == PlaySide.red.index
         ? '红方'
         : '黑方';
-    final status = _boardStatusLabel(state.status);
+    final status = _gamePhaseLabel(state.phase);
     return ListView(
       padding: EdgeInsets.zero,
       children: [
@@ -1111,7 +1161,7 @@ class _PositionSummary extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(horizontal: 6),
           leading: const Icon(Icons.save_outlined),
           title: const Text('本地存档'),
-          trailing: const Text('已自动保存'),
+          trailing: Text(_persistenceLabel(state.persistenceStatus)),
         ),
       ],
     );
@@ -1134,28 +1184,31 @@ class _GameCommandBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bloc = context.read<ChessBloc>();
-    final canUndo =
-        (state.status == BoardStatus.idle ||
-            state.status == BoardStatus.finished) &&
-        (state.playMode == PlayMode.withSelf
-            ? state.board.lastMoves.isNotEmpty
-            : state.board.lastMoves.length > 1);
-    final canHint =
-        state.playMode == PlayMode.withAI &&
-        state.status == BoardStatus.idle &&
-        state.board.isTurn(state.playSide);
-    final commands = [
+    final commands = <_GameCommand>[
       _GameCommand(
         label: '悔棋',
         icon: Icons.undo,
-        onPressed: canUndo ? () => bloc.add(const ChessEventUndo()) : null,
+        onPressed: state.canUndo
+            ? () => bloc.add(const ChessEventUndo())
+            : null,
       ),
-      _GameCommand(
-        label: '提示',
-        icon: Icons.lightbulb_outline,
-        active: state.hintMoves?.isNotEmpty == true,
-        onPressed: canHint ? () => bloc.add(const ChessEventGetHint()) : null,
-      ),
+      if (state.playMode == PlayMode.withAI)
+        _GameCommand(
+          label: '提示',
+          icon: Icons.lightbulb_outline,
+          active: state.hintMoves.isNotEmpty,
+          onPressed: state.canHint
+              ? () => bloc.add(const ChessEventGetHint())
+              : null,
+        )
+      else
+        _GameCommand(
+          label: '翻转',
+          icon: Icons.flip_camera_android_outlined,
+          onPressed: state.canFlip
+              ? () => bloc.add(const ChessEventFlipBoard())
+              : null,
+        ),
       _GameCommand(label: '棋谱', icon: Icons.list_alt, onPressed: onNotation),
       _GameCommand(label: '菜单', icon: Icons.menu, onPressed: onMenu),
     ];
@@ -1288,6 +1341,60 @@ class _EffectLabel extends StatelessWidget {
   }
 }
 
+class _FailureOverlay extends StatelessWidget {
+  const _FailureOverlay({
+    required this.message,
+    required this.canRetry,
+    required this.onRetry,
+    required this.onSwitchToLocal,
+  });
+
+  final String message;
+  final bool canRetry;
+  final VoidCallback onRetry;
+  final VoidCallback onSwitchToLocal;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: .58),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: _GlassSurface(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 42),
+                    const SizedBox(height: 12),
+                    Text(message, textAlign: TextAlign.center),
+                    const SizedBox(height: 20),
+                    if (canRetry)
+                      FilledButton.icon(
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重试思考'),
+                      ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: onSwitchToLocal,
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('切换本地双人'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _GlassSurface extends StatelessWidget {
   const _GlassSurface({
     required this.child,
@@ -1334,144 +1441,288 @@ class _DesktopBackdrop extends StatelessWidget {
   }
 }
 
-class ChessBoard extends StatelessWidget {
+class ChessBoard extends StatefulWidget {
   const ChessBoard({super.key});
+
+  @override
+  State<ChessBoard> createState() => _ChessBoardState();
+}
+
+class _ChessBoardState extends State<ChessBoard> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'chess-board');
+  PiecePos _keyboardPosition = PiecePos(SquareBoard.coordXYFix(4, 9));
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleKey(KeyEvent event, ChessState state) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      context.read<ChessBloc>().add(const ChessEventClearSelection());
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space) {
+      if (state.canInteractBoard) {
+        context.read<ChessBloc>().add(ChessEventBoardTap(_keyboardPosition));
+      }
+      return KeyEventResult.handled;
+    }
+    var dx = 0;
+    var dy = 0;
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) dx = -1;
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) dx = 1;
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) dy = -1;
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) dy = 1;
+    if (dx == 0 && dy == 0) return KeyEventResult.ignored;
+    if (state.boardFlipped) {
+      dx = -dx;
+      dy = -dy;
+    }
+    final x =
+        (SquareBoard.getFileX(_keyboardPosition.sq) -
+                SquareBoard.FILE_LEFT +
+                dx)
+            .clamp(0, 8);
+    final y =
+        (SquareBoard.getRankY(_keyboardPosition.sq) - SquareBoard.RANK_TOP + dy)
+            .clamp(0, 9);
+    setState(() {
+      _keyboardPosition = PiecePos(SquareBoard.coordXYFix(x, y));
+    });
+    return KeyEventResult.handled;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = context.select((ThemeBloc bloc) => bloc.state.theme);
     final state = context.select((ChessBloc bloc) => bloc.state);
-    final board = state.board;
-    final locked = state.status != BoardStatus.idle;
+    final effect = state.activePresentation;
+    final animating = effect?.stage == PresentationStage.animating;
+    final board = animating ? effect!.beforeBoard : state.board;
+    final locked = !state.canInteractBoard;
+    final flipped = state.boardFlipped;
+    final movingFrom = effect?.kind == PresentationEffectKind.undo
+        ? effect?.move.dstPos
+        : effect?.move.srcPos;
+    final movingTo = effect?.kind == PresentationEffectKind.undo
+        ? effect?.move.srcPos
+        : effect?.move.dstPos;
 
     return Semantics(
-      label: '中国象棋棋盘',
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: theme.boardSize.width / theme.boardSize.height,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: SizedBox(
-              height: theme.boardSize.height,
-              width: theme.boardSize.width,
-              child: Stack(
-                children: [
-                  theme.buildBoard(context),
-                  Padding(
-                    padding: theme.boardPadding,
-                    child: IgnorePointer(
-                      ignoring: locked,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapUp: (tap) {
-                          final position = theme.hitTest(tap.localPosition);
-                          if (position != null) {
-                            context.read<ChessBloc>().add(
-                              ChessEventBoardTap(position),
+      label: '中国象棋棋盘，方向${flipped ? '黑方在下' : '红方在下'}',
+      child: Focus(
+        focusNode: _focusNode,
+        onKeyEvent: (_, event) => _handleKey(event, state),
+        child: Center(
+          child: AspectRatio(
+            aspectRatio: theme.boardSize.width / theme.boardSize.height,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: SizedBox(
+                height: theme.boardSize.height,
+                width: theme.boardSize.width,
+                child: Stack(
+                  children: [
+                    theme.buildBoard(context),
+                    Padding(
+                      padding: theme.boardPadding,
+                      child: IgnorePointer(
+                        ignoring: locked,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapDown: (_) => _focusNode.requestFocus(),
+                          onTapUp: (tap) {
+                            final contentSize = Size(
+                              theme.boardSize.width -
+                                  theme.boardPadding.horizontal,
+                              theme.boardSize.height -
+                                  theme.boardPadding.vertical,
                             );
-                          }
-                        },
-                        child: Stack(
-                          children: [
-                            if (state.lastMove != null) ...[
-                              Align(
-                                alignment: theme.getAlignment(
-                                  state.lastMove!.srcPos,
-                                ),
-                                child: theme.buildMovePrint(context, true),
-                              ),
-                              Align(
-                                alignment: theme.getAlignment(
-                                  state.lastMove!.dstPos,
-                                ),
-                                child: theme.buildMovePrint(context, false),
-                              ),
-                            ],
-                            if (state.hintMoves?.isNotEmpty == true) ...[
-                              Align(
-                                alignment: theme.getAlignment(
-                                  state.hintMoves!.first.srcPos,
-                                ),
-                                child: theme.buildMovePrint(context, true),
-                              ),
-                              Align(
-                                alignment: theme.getAlignment(
-                                  state.hintMoves!.first.dstPos,
-                                ),
-                                child: theme.buildPieceMask(context),
-                              ),
-                            ],
-                            if (state.animeMove != null)
-                              Align(
-                                alignment: theme.getAlignment(
-                                  state.animeMove!.srcPos,
-                                ),
-                                child: theme.buildMovePrint(context, true),
-                              ),
-                            ...board.pcPairs.map((pair) {
-                              if (state.animeMoveInvalid?.sqSrc == pair.sq ||
-                                  state.animeMove?.sqSrc == pair.sq) {
-                                return const SizedBox.shrink();
-                              }
-                              return Align(
-                                alignment: theme.getAlignment(pair.pos),
-                                child: state.selected?.sq == pair.sq
-                                    ? theme.buildSelectedPiece(
-                                        context,
-                                        pair.piece,
-                                      )
-                                    : theme.buildPiece(context, pair.piece),
+                            final offset = flipped
+                                ? Offset(
+                                    contentSize.width - tap.localPosition.dx,
+                                    contentSize.height - tap.localPosition.dy,
+                                  )
+                                : tap.localPosition;
+                            final position = theme.hitTest(offset);
+                            if (position != null) {
+                              setState(() => _keyboardPosition = position);
+                              context.read<ChessBloc>().add(
+                                ChessEventBoardTap(position),
                               );
-                            }),
-                            if (state.selectedMoves != null)
-                              ...state.selectedMoves!.map(
-                                (move) => Align(
-                                  alignment: theme.getAlignment(move.dstPos),
+                            }
+                          },
+                          child: Stack(
+                            children: [
+                              if (state.lastMove != null) ...[
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(
+                                      state.lastMove!.srcPos,
+                                      flipped,
+                                    ),
+                                  ),
+                                  child: theme.buildMovePrint(context, true),
+                                ),
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(
+                                      state.lastMove!.dstPos,
+                                      flipped,
+                                    ),
+                                  ),
+                                  child: theme.buildMovePrint(context, false),
+                                ),
+                              ],
+                              if (state.hintMoves.isNotEmpty) ...[
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(
+                                      state.hintMoves.first.srcPos,
+                                      flipped,
+                                    ),
+                                  ),
+                                  child: theme.buildMovePrint(context, true),
+                                ),
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(
+                                      state.hintMoves.first.dstPos,
+                                      flipped,
+                                    ),
+                                  ),
                                   child: theme.buildPieceMask(context),
                                 ),
-                              ),
-                            if (state.animeMoveInvalid != null)
-                              AnimatedInvalidMove(
-                                begin: theme.getAlignment(
-                                  state.animeMoveInvalid!.srcPos,
+                              ],
+                              if (animating &&
+                                  effect!.kind !=
+                                      PresentationEffectKind.invalidMove)
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(movingFrom!, flipped),
+                                  ),
+                                  child: theme.buildMovePrint(context, true),
                                 ),
-                                end: theme.getAlignment(
-                                  state.animeMoveInvalid!.dstPos,
+                              ...board.pcPairs.map((pair) {
+                                if (animating && movingFrom?.sq == pair.sq) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(pair.pos, flipped),
+                                  ),
+                                  child: Semantics(
+                                    button: true,
+                                    label: _pieceSemantic(pair.piece, pair.pos),
+                                    child:
+                                        effect?.kind ==
+                                                PresentationEffectKind.move &&
+                                            effect?.capturedPiece != null &&
+                                            effect?.move.sqDst == pair.sq &&
+                                            animating
+                                        ? AnimatedCapturedPiece(
+                                            key: ValueKey(
+                                              'captured-${effect!.id}',
+                                            ),
+                                            child: theme.buildPiece(
+                                              context,
+                                              pair.piece,
+                                            ),
+                                          )
+                                        : state.selected?.sq == pair.sq &&
+                                              !animating
+                                        ? theme.buildSelectedPiece(
+                                            context,
+                                            pair.piece,
+                                          )
+                                        : theme.buildPiece(context, pair.piece),
+                                  ),
+                                );
+                              }),
+                              if (!animating)
+                                ...state.selectedMoves.map(
+                                  (move) => Align(
+                                    alignment: theme.getAlignment(
+                                      _viewPosition(move.dstPos, flipped),
+                                    ),
+                                    child: theme.buildPieceMask(context),
+                                  ),
                                 ),
-                                child: theme.buildPiece(
-                                  context,
-                                  state.board.getPiece(
-                                    state.animeMoveInvalid!.sqSrc,
-                                  )!,
+                              if (_focusNode.hasFocus)
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(_keyboardPosition, flipped),
+                                  ),
+                                  child: IgnorePointer(
+                                    child: Container(
+                                      width: theme.pieceSize * .82,
+                                      height: theme.pieceSize * .82,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: _GameColors.jade,
+                                          width: 3,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                onEnd: () => context.read<ChessBloc>().add(
-                                  ChessEventMoveEnd(state.animeMoveInvalid),
+                              if (animating &&
+                                  effect?.kind ==
+                                      PresentationEffectKind.invalidMove &&
+                                  effect?.movingPiece != null)
+                                AnimatedInvalidMove(
+                                  key: ValueKey('invalid-${effect!.id}'),
+                                  begin: theme.getAlignment(
+                                    _viewPosition(effect.move.srcPos, flipped),
+                                  ),
+                                  end: theme.getAlignment(
+                                    _viewPosition(effect.move.dstPos, flipped),
+                                  ),
+                                  child: theme.buildPiece(
+                                    context,
+                                    effect.movingPiece!,
+                                  ),
+                                  onEnd: () => context.read<ChessBloc>().add(
+                                    ChessEventPresentationAnimationCompleted(
+                                      effect.id,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            if (state.animeMove != null &&
-                                state.board.getPiece(state.animeMove!.sqSrc) !=
-                                    null)
-                              AnimatedMove(
-                                begin: theme.getAlignment(
-                                  state.animeMove!.srcPos,
+                              if (animating &&
+                                  effect!.kind !=
+                                      PresentationEffectKind.invalidMove &&
+                                  effect.movingPiece != null)
+                                AnimatedMove(
+                                  key: ValueKey('move-${effect.id}'),
+                                  begin: theme.getAlignment(
+                                    _viewPosition(movingFrom!, flipped),
+                                  ),
+                                  end: theme.getAlignment(
+                                    _viewPosition(movingTo!, flipped),
+                                  ),
+                                  child: theme.buildPiece(
+                                    context,
+                                    effect.movingPiece!,
+                                  ),
+                                  duration: _moveDuration(effect.move),
+                                  onEnd: () => context.read<ChessBloc>().add(
+                                    ChessEventPresentationAnimationCompleted(
+                                      effect.id,
+                                    ),
+                                  ),
                                 ),
-                                end: theme.getAlignment(
-                                  state.animeMove!.dstPos,
-                                ),
-                                child: theme.buildPiece(
-                                  context,
-                                  state.board.getPiece(state.animeMove!.sqSrc)!,
-                                ),
-                                onEnd: () => context.read<ChessBloc>().add(
-                                  ChessEventMoveEnd(state.animeMove),
-                                ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1479,6 +1730,20 @@ class ChessBoard extends StatelessWidget {
       ),
     );
   }
+}
+
+PiecePos _viewPosition(PiecePos position, bool flipped) =>
+    flipped ? PiecePos(SquareBoard.getSquareFlip(position.sq)) : position;
+
+Duration _moveDuration(MovePos move) {
+  final dx =
+      (SquareBoard.getFileX(move.sqDst) - SquareBoard.getFileX(move.sqSrc))
+          .abs();
+  final dy =
+      (SquareBoard.getRankY(move.sqDst) - SquareBoard.getRankY(move.sqSrc))
+          .abs();
+  final distance = dx > dy ? dx : dy;
+  return Duration(milliseconds: (180 + distance * 20).clamp(180, 300));
 }
 
 String _modeTitle(PlayMode mode) {
@@ -1496,20 +1761,42 @@ String _playEffectLabel(PlayEffect effect) {
   }
 }
 
-String _boardStatusLabel(BoardStatus status) {
-  switch (status) {
-    case BoardStatus.thinking:
+String _gamePhaseLabel(GamePhase phase) {
+  switch (phase) {
+    case GamePhase.aiThinking:
       return '电脑思考中';
-    case BoardStatus.busy:
-      return '棋子移动中';
-    case BoardStatus.paused:
+    case GamePhase.paused:
       return '已暂停';
-    case BoardStatus.finished:
+    case GamePhase.finished:
       return '棋局结束';
-    case BoardStatus.initialized:
-    case BoardStatus.idle:
+    case GamePhase.loading:
+      return '正在准备';
+    case GamePhase.failure:
+      return '需要处理';
+    case GamePhase.playerTurn:
       return '等待落子';
   }
+}
+
+String _persistenceLabel(PersistenceStatus status) {
+  switch (status) {
+    case PersistenceStatus.idle:
+      return '本地';
+    case PersistenceStatus.saving:
+      return '保存中';
+    case PersistenceStatus.saved:
+      return '已保存';
+    case PersistenceStatus.failed:
+      return '保存失败';
+  }
+}
+
+String _pieceSemantic(ChessPiece piece, PiecePos position) {
+  const names = ['将', '士', '象', '马', '车', '炮', '兵'];
+  final side = piece.isRedSide() ? '红方' : '黑方';
+  final file = SquareBoard.getFileX(position.sq) - SquareBoard.FILE_LEFT + 1;
+  final rank = SquareBoard.getRankY(position.sq) - SquareBoard.RANK_TOP + 1;
+  return '$side${names[piece.numTag]}，第$file路，第$rank线';
 }
 
 String _moveLabel(MovePos move) {

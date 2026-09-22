@@ -49,7 +49,13 @@ abstract class ChessEnginePort {
 
   Future<int> requestMove();
 
+  /// Searches the current position and commits the returned move in the
+  /// engine. Used when restoring a game that stopped on the computer turn.
+  Future<int> requestAndMakeMove();
+
   Future<void> requestUndo(int mv, int pc);
+
+  Future<void> dispose();
 }
 
 class ChessEngine implements ChessEnginePort {
@@ -61,6 +67,10 @@ class ChessEngine implements ChessEnginePort {
       switch (method) {
         case 'board.requestMove':
           search.searchMain();
+          return search.mvResult;
+        case 'board.requestAndMakeMove':
+          search.searchMain();
+          search.pos.makeMove(search.mvResult);
           return search.mvResult;
         case 'board.makeMove':
           final int mv = params;
@@ -115,16 +125,21 @@ class ChessEngine implements ChessEnginePort {
       _recvPort.sendPort,
       debugName: '_engineIsolate',
     ).then((isolate) {
-      _isolate = isolate;
+      if (_disposed) {
+        isolate.kill();
+      } else {
+        _isolate = isolate;
+      }
     });
 
     _recvPort.listen(_onMessage);
   }
 
   final ReceivePort _recvPort = ReceivePort();
-  late Isolate _isolate;
+  Isolate? _isolate;
   final Completer<SendPort> _readyPort = Completer<SendPort>();
   final Map<int, _PendingResponse> pendingResponseMap = {};
+  bool _disposed = false;
 
   void _onMessage(message) {
     if (message is _Response) {
@@ -146,8 +161,19 @@ class ChessEngine implements ChessEnginePort {
     }
   }
 
-  void dispose() {
-    _isolate.kill();
+  @override
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    final isolate = _isolate;
+    _recvPort.close();
+    isolate?.kill();
+    for (final pending in pendingResponseMap.values) {
+      if (!pending.completer.isCompleted) {
+        pending.completer.completeError(StateError('Chess engine disposed'));
+      }
+    }
+    pendingResponseMap.clear();
   }
 
   Future invokeMethod(String method, dynamic params) async {
@@ -172,6 +198,11 @@ class ChessEngine implements ChessEnginePort {
   @override
   Future<int> requestMove() async {
     return await invokeMethod('board.requestMove', null);
+  }
+
+  @override
+  Future<int> requestAndMakeMove() async {
+    return await invokeMethod('board.requestAndMakeMove', null);
   }
 
   @override

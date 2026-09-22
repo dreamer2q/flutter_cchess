@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
 import 'package:flutter_cchess/chess/game/game.dart';
 import 'package:flutter_cchess/models/board.dart';
@@ -8,267 +7,206 @@ import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/storage/storage.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/fen.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'initializes local two-player mode and persists a game snapshot',
-    () async {
-      final repository = InMemoryGameRepository();
-      final bloc = _bloc(repository: repository);
+  test('initializes local game and persists its initial snapshot', () async {
+    final repository = InMemoryGameRepository();
+    final bloc = _bloc(repository: repository);
 
-      await _initialize(bloc, PlayMode.withSelf);
-      expect(bloc.state.playMode, PlayMode.withSelf);
-
-      await Future<void>.delayed(Duration.zero);
-      final record = await repository.getCurrent();
-      expect(record, isNotNull);
-      expect(record!.mode, GamePlayMode.self);
-      expect(record.moves, isEmpty);
-
-      await bloc.close();
-    },
-  );
-
-  test('pauses an idle game, clears selection, and resumes it', () async {
-    final bloc = _bloc();
     await _initialize(bloc, PlayMode.withSelf);
-    final selectable = bloc.state.board.pcPairs.firstWhere(
-      (pair) => bloc.state.board.isSelectable(pair.piece),
-    );
-
-    bloc.add(ChessEventBoardTap(selectable.pos));
-    await _waitFor(bloc, (state) => state.selected != null);
-    bloc.add(const ChessEventPause());
-    await _waitFor(bloc, (state) => state.status == BoardStatus.paused);
-    expect(bloc.state.selected, isNull);
-
-    bloc.add(const ChessEventResume());
-    await _waitFor(bloc, (state) => state.status == BoardStatus.idle);
+    expect(bloc.state.phase, GamePhase.playerTurn);
+    await bloc.flushPersistence();
+    expect((await repository.getCurrent())?.mode, GamePlayMode.self);
     await bloc.close();
   });
 
-  test('restores AI engine history before accepting input', () async {
-    final engine = ControlledChessEngine();
-    final initialBoard = FenUtil.parse(initialFenString);
-    final firstMove = initialBoard.getMoves().first;
-    final restoredBoard = initialBoard.copyWith(
-      actions: initialBoard.actions.rebuild(
-        (actions) => actions..add(BoardMoveAction(firstMove.mv)),
-      ),
-    );
-    final bloc = _bloc(engine: engine);
-
-    bloc.add(
-      ChessEventInitialized(
-        initialBoard: restoredBoard,
-        playMode: PlayMode.withAI,
-      ),
-    );
-    await _waitFor(bloc, (state) => state.status == BoardStatus.idle);
-
-    expect(engine.restoredMoves, [firstMove.mv]);
-    expect(bloc.state.board.lastMoves, [firstMove]);
-    await bloc.close();
-  });
-
-  test(
-    'hint locks the board, returns a marker, and selection clears it',
-    () async {
-      final engine = ControlledChessEngine();
-      final bloc = _bloc(engine: engine);
-      await _initialize(bloc, PlayMode.withAI);
-      final hint = bloc.state.board.getMoves().first;
-
-      bloc.add(const ChessEventGetHint());
-      await _waitFor(bloc, (state) => state.status == BoardStatus.thinking);
-      expect(bloc.state.board.lastMoves, isEmpty);
-
-      engine.hintCompleter.complete(hint.mv);
-      await _waitFor(
-        bloc,
-        (state) =>
-            state.status == BoardStatus.idle && state.hintMoves?.single == hint,
-      );
-      expect(bloc.state.board.lastMoves, isEmpty);
-
-      bloc.add(ChessEventBoardTap(hint.srcPos));
-      await _waitFor(
-        bloc,
-        (state) => state.selected != null && state.hintMoves == null,
-      );
-      await bloc.close();
-    },
-  );
-
-  test('pausing AI thinking caches its move until resume', () async {
-    final engine = ControlledChessEngine();
-    final bloc = _bloc(engine: engine);
-    await _initialize(bloc, PlayMode.withAI);
-    final playerMove = bloc.state.board.getMoves().first;
-
-    await _completeMove(bloc, playerMove, BoardStatus.thinking);
-    final aiMove = bloc.state.board.getMoves().first;
-    bloc.add(const ChessEventPause());
-    await _waitFor(bloc, (state) => state.status == BoardStatus.paused);
-
-    engine.aiMoveCompleter.complete(aiMove.mv);
-    await Future<void>.delayed(Duration.zero);
-    expect(bloc.state.status, BoardStatus.paused);
-    expect(bloc.state.animeMove, isNull);
-
-    bloc.add(const ChessEventResume());
-    await _waitFor(
-      bloc,
-      (state) => state.status == BoardStatus.busy && state.animeMove == aiMove,
-    );
-    await bloc.close();
-  });
-
-  test(
-    'duplicate move-end events do not turn AI thinking back to idle',
-    () async {
-      final engine = ControlledChessEngine();
-      final bloc = _bloc(engine: engine);
-      await _initialize(bloc, PlayMode.withAI);
-      final playerMove = bloc.state.board.getMoves().first;
-
-      await _completeMove(bloc, playerMove, BoardStatus.thinking);
-      bloc.add(const ChessEventMoveEnd());
-      bloc.add(ChessEventMoveEnd(playerMove));
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-
-      expect(bloc.state.status, BoardStatus.thinking);
-      expect(bloc.state.board.lastMoves, [playerMove]);
-
-      final aiMove = bloc.state.board.getMoves().first;
-      engine.aiMoveCompleter.complete(aiMove.mv);
-      await _waitFor(bloc, (state) => state.animeMove == aiMove);
-      await bloc.close();
-    },
-  );
-
-  test(
-    'move completion timeout commits once when animation callback is lost',
-    () async {
-      final bloc = _bloc(
-        animationCompletionTimeout: const Duration(milliseconds: 10),
-      );
-      await _initialize(bloc, PlayMode.withSelf);
-      final move = bloc.state.board.getMoves().first;
-
-      bloc.add(ChessEventMoveBegin(move));
-      await _waitFor(bloc, (state) => state.status == BoardStatus.busy);
-      await _waitFor(
-        bloc,
-        (state) =>
-            state.status == BoardStatus.idle &&
-            state.board.lastMoves.length == 1,
-      );
-      expect(bloc.state.lastMove, move);
-
-      bloc.add(ChessEventMoveEnd(move));
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(bloc.state.board.lastMoves, [move]);
-      await bloc.close();
-    },
-  );
-
-  test('a stale move-end callback cannot complete the active move', () async {
+  test('legal move commits before presentation is acknowledged', () async {
     final bloc = _bloc();
     await _initialize(bloc, PlayMode.withSelf);
     final move = bloc.state.board.getMoves().first;
-    final staleMove = bloc.state.board.getMoves().last;
 
-    bloc.add(ChessEventMoveBegin(move));
-    await _waitFor(bloc, (state) => state.status == BoardStatus.busy);
-    bloc.add(ChessEventMoveEnd(staleMove));
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(bloc.state.status, BoardStatus.busy);
-    expect(bloc.state.board.lastMoves, isEmpty);
+    bloc.add(ChessEventMoveRequested(move));
+    await _waitFor(bloc, (s) => s.board.lastMoves.length == 1);
+    final effect = bloc.state.activePresentation!;
+    expect(effect.move, move);
+    expect(effect.beforeBoard.lastMoves, isEmpty);
+    expect(effect.afterBoard.lastMoves, [move]);
 
-    bloc.add(ChessEventMoveEnd(move));
-    await _waitFor(bloc, (state) => state.status == BoardStatus.idle);
+    bloc.add(ChessEventPresentationAcknowledged(effect.id));
+    await _waitFor(bloc, (s) => s.presentations.isEmpty);
     expect(bloc.state.board.lastMoves, [move]);
     await bloc.close();
   });
 
   test(
-    'undo restores the previous last move and eventually clears it',
+    'stale presentation acknowledgement cannot consume a new effect',
     () async {
       final bloc = _bloc();
       await _initialize(bloc, PlayMode.withSelf);
-      final redMove = bloc.state.board.getMoves().first;
-      await _completeMove(bloc, redMove, BoardStatus.idle);
-      final blackMove = bloc.state.board.getMoves().first;
-      await _completeMove(bloc, blackMove, BoardStatus.idle);
+      final move = bloc.state.board.getMoves().first;
+      bloc.add(ChessEventMoveRequested(move));
+      await _waitFor(bloc, (s) => s.presentations.isNotEmpty);
+      final id = bloc.state.activePresentation!.id;
+
+      bloc.add(ChessEventPresentationAcknowledged(id + 1));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(bloc.state.activePresentation?.id, id);
+      await bloc.close();
+    },
+  );
+
+  test('invalid move retains selection and creates unique effects', () async {
+    final bloc = _bloc();
+    await _initialize(bloc, PlayMode.withSelf);
+    final pair = bloc.state.board.pcPairs.firstWhere(
+      (candidate) => bloc.state.board.isSelectable(candidate.piece),
+    );
+    bloc.add(ChessEventBoardTap(pair.pos));
+    await _waitFor(bloc, (s) => s.selected != null);
+    final invalid = MovePos(pair.sq, pair.sq);
+
+    bloc.add(ChessEventMoveRequested(invalid));
+    await _waitFor(bloc, (s) => s.presentations.isNotEmpty);
+    final first = bloc.state.activePresentation!;
+    expect(first.kind, PresentationEffectKind.invalidMove);
+    expect(bloc.state.selected?.sq, pair.sq);
+    bloc.add(ChessEventPresentationAcknowledged(first.id));
+    await _waitFor(bloc, (s) => s.presentations.isEmpty);
+
+    bloc.add(ChessEventMoveRequested(invalid));
+    await _waitFor(bloc, (s) => s.presentations.isNotEmpty);
+    expect(bloc.state.activePresentation!.id, isNot(first.id));
+    await bloc.close();
+  });
+
+  test('fast AI result queues behind human presentation', () async {
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    await _initialize(bloc, PlayMode.withAI);
+    final human = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventMoveRequested(human));
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+    final ai = bloc.state.board.getMoves().first;
+    engine.makeMoveCompleter.complete(ai.mv);
+
+    await _waitFor(bloc, (s) => s.board.lastMoves.length == 2);
+    expect(bloc.state.presentations.map((e) => e.move), [human, ai]);
+    expect(bloc.state.phase, GamePhase.playerTurn);
+    final humanId = bloc.state.presentations.first.id;
+    final aiId = bloc.state.presentations.last.id;
+    bloc.add(ChessEventPresentationAcknowledged(humanId));
+    await _waitFor(bloc, (s) => s.activePresentation?.id == aiId);
+    await bloc.close();
+  });
+
+  test('restored AI turn resumes and commits the computer move', () async {
+    final engine = ControlledChessEngine();
+    final initial = FenUtil.parse(initialFenString);
+    final human = initial.getMoves().first;
+    final restored = _apply(initial, human);
+    final bloc = _bloc(engine: engine);
+
+    bloc.add(ChessEventInitialized(initialBoard: restored));
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+    expect(engine.restoredMoves, [human.mv]);
+    final ai = restored.getMoves().first;
+    engine.resumeMoveCompleter.complete(ai.mv);
+    await _waitFor(bloc, (s) => s.board.lastMoves.length == 2);
+    expect(bloc.state.board.lastMoves.last, ai);
+    await bloc.close();
+  });
+
+  test('AI result is committed while paused and shown after resume', () async {
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    await _initialize(bloc, PlayMode.withAI);
+    final human = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventMoveRequested(human));
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+    final ai = bloc.state.board.getMoves().first;
+    bloc.add(const ChessEventPause());
+    await _waitFor(bloc, (s) => s.phase == GamePhase.paused);
+    engine.makeMoveCompleter.complete(ai.mv);
+    await _waitFor(bloc, (s) => s.board.lastMoves.length == 2);
+    expect(bloc.state.phase, GamePhase.paused);
+
+    bloc.add(const ChessEventResume());
+    await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
+    await bloc.close();
+  });
+
+  test('resigning invalidates a later AI result', () async {
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    await _initialize(bloc, PlayMode.withAI);
+    final human = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventMoveRequested(human));
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+    final ai = bloc.state.board.getMoves().first;
+    bloc.add(const ChessEventResign());
+    await _waitFor(bloc, (s) => s.phase == GamePhase.finished);
+    engine.makeMoveCompleter.complete(ai.mv);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(bloc.state.board.lastMoves, [human]);
+    expect(bloc.state.winningSide, PlaySide.black);
+    await bloc.close();
+  });
+
+  test('hint never commits a move', () async {
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    await _initialize(bloc, PlayMode.withAI);
+    final hint = bloc.state.board.getMoves().first;
+    bloc.add(const ChessEventGetHint());
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+    engine.hintCompleter.complete(hint.mv);
+    await _waitFor(bloc, (s) => s.hintMoves.isNotEmpty);
+    expect(bloc.state.board.lastMoves, isEmpty);
+    expect(bloc.state.phase, GamePhase.playerTurn);
+    await bloc.close();
+  });
+
+  test(
+    'local undo commits immediately and emits reverse presentation',
+    () async {
+      final bloc = _bloc();
+      await _initialize(bloc, PlayMode.withSelf);
+      final move = bloc.state.board.getMoves().first;
+      bloc.add(ChessEventMoveRequested(move));
+      await _waitFor(bloc, (s) => s.board.lastMoves.length == 1);
+      bloc.add(
+        ChessEventPresentationAcknowledged(bloc.state.activePresentation!.id),
+      );
+      await _waitFor(bloc, (s) => s.presentations.isEmpty);
 
       bloc.add(const ChessEventUndo());
       await _waitFor(
         bloc,
-        (state) =>
-            state.board.lastMoves.length == 1 && state.lastMove == redMove,
+        (s) => s.board.lastMoves.isEmpty && s.presentations.isNotEmpty,
       );
-
-      bloc.add(const ChessEventUndo());
-      await _waitFor(bloc, (state) => state.board.lastMoves.isEmpty);
-      expect(bloc.state.lastMove, isNull);
+      expect(bloc.state.activePresentation!.kind, PresentationEffectKind.undo);
       await bloc.close();
     },
   );
 
-  test(
-    'local resignation awards the win to the opponent of the active side',
-    () async {
-      final repository = InMemoryGameRepository();
-      final bloc = _bloc(repository: repository);
-      await _initialize(bloc, PlayMode.withSelf);
-      final redMove = bloc.state.board.getMoves().first;
-      await _completeMove(bloc, redMove, BoardStatus.idle);
-      expect(bloc.state.board.innerBoard.sdPlayer, PlaySide.black.index);
-
-      bloc.add(const ChessEventResign());
-      await _waitFor(bloc, (state) => state.status == BoardStatus.finished);
-      expect(bloc.state.winningSide, PlaySide.red);
-      expect(bloc.state.playStatus, PlayStatus.lose);
-
-      await Future<void>.delayed(Duration.zero);
-      expect((await repository.getCurrent())!.result, GameResult.redWin);
-      await bloc.close();
-    },
-  );
-
-  test('resigning during AI thinking ignores the later AI result', () async {
-    final engine = ControlledChessEngine();
-    final bloc = _bloc(engine: engine);
-    await _initialize(bloc, PlayMode.withAI);
-    final playerMove = bloc.state.board.getMoves().first;
-    await _completeMove(bloc, playerMove, BoardStatus.thinking);
-    final movesBeforeResign = bloc.state.board.lastMoves.toList();
-
-    bloc.add(const ChessEventResign());
-    await _waitFor(bloc, (state) => state.status == BoardStatus.finished);
-    engine.aiMoveCompleter.complete(bloc.state.board.getMoves().first.mv);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-
-    expect(bloc.state.status, BoardStatus.finished);
-    expect(bloc.state.board.lastMoves, movesBeforeResign);
-    expect(bloc.state.winningSide, PlaySide.black);
+  test('flip only changes presentation orientation', () async {
+    final bloc = _bloc();
+    await _initialize(bloc, PlayMode.withSelf);
+    final board = bloc.state.board;
+    bloc.add(const ChessEventFlipBoard());
+    await _waitFor(bloc, (s) => s.boardFlipped);
+    expect(bloc.state.board, board);
     await bloc.close();
   });
 }
 
-ChessBloc _bloc({
-  GameRepository? repository,
-  ChessEnginePort? engine,
-  Duration animationCompletionTimeout = ChessBloc.moveCompletionTimeout,
-}) {
-  return ChessBloc(
-    ticker: Ticker(),
-    repository: repository,
-    engine: engine,
-    animationCompletionTimeout: animationCompletionTimeout,
-  );
-}
+Board _apply(Board board, MovePos move) => board.copyWith(
+  actions: board.actions.rebuild((b) => b..add(BoardMoveAction(move.mv))),
+);
+
+ChessBloc _bloc({GameRepository? repository, ChessEnginePort? engine}) =>
+    ChessBloc(ticker: Ticker(), repository: repository, engine: engine);
 
 Future<void> _initialize(ChessBloc bloc, PlayMode mode) async {
   bloc.add(
@@ -277,21 +215,7 @@ Future<void> _initialize(ChessBloc bloc, PlayMode mode) async {
       playMode: mode,
     ),
   );
-  await _waitFor(bloc, (state) => state.status == BoardStatus.idle);
-}
-
-Future<void> _completeMove(
-  ChessBloc bloc,
-  MovePos move,
-  BoardStatus expectedStatus,
-) async {
-  bloc.add(ChessEventMoveBegin(move));
-  await _waitFor(
-    bloc,
-    (state) => state.status == BoardStatus.busy && state.animeMove == move,
-  );
-  bloc.add(ChessEventMoveEnd(move));
-  await _waitFor(bloc, (state) => state.status == expectedStatus);
+  await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
 }
 
 Future<ChessState> _waitFor(
@@ -303,17 +227,18 @@ Future<ChessState> _waitFor(
 }
 
 class ControlledChessEngine implements ChessEnginePort {
-  final Completer<int> aiMoveCompleter = Completer<int>();
+  final Completer<int> makeMoveCompleter = Completer<int>();
   final Completer<int> hintCompleter = Completer<int>();
-  final List<List<int>> undoRequests = <List<int>>[];
+  final Completer<int> resumeMoveCompleter = Completer<int>();
   final List<int> restoredMoves = <int>[];
+  bool disposed = false;
 
   @override
-  Future<int> makeMove(int mv) => aiMoveCompleter.future;
-
+  Future<int> makeMove(int mv) => makeMoveCompleter.future;
   @override
   Future<int> requestMove() => hintCompleter.future;
-
+  @override
+  Future<int> requestAndMakeMove() => resumeMoveCompleter.future;
   @override
   Future<void> restore(Iterable<int> moves) async {
     restoredMoves
@@ -322,7 +247,7 @@ class ControlledChessEngine implements ChessEnginePort {
   }
 
   @override
-  Future<void> requestUndo(int mv, int pc) async {
-    undoRequests.add([mv, pc]);
-  }
+  Future<void> requestUndo(int mv, int pc) async {}
+  @override
+  Future<void> dispose() async => disposed = true;
 }

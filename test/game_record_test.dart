@@ -51,4 +51,23 @@ void main() {
     await repository.clear();
     expect(await repository.getCurrent(), isNull);
   });
+
+  test('latest unfinished game is not hidden by a completed game', () async {
+    final repository = InMemoryGameRepository();
+    await repository.save(record);
+    await repository.save(
+      GameRecord(
+        id: 'finished-newer',
+        initialFen: record.initialFen,
+        moves: record.moves,
+        mode: record.mode,
+        result: GameResult.redWin,
+        createdAt: createdAt,
+        updatedAt: updatedAt.add(const Duration(minutes: 1)),
+      ),
+    );
+
+    expect((await repository.getCurrent())?.id, 'finished-newer');
+    expect(await repository.getLatestInProgress(), record);
+  });
 }

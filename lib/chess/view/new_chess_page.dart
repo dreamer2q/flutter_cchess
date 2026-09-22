@@ -20,7 +20,7 @@ class _NewChessPageState extends State<NewChessPage> {
     final preferences = await SharedPreferences.getInstance();
     final record = await SharedPreferencesGameRepository(
       preferences,
-    ).getCurrent();
+    ).getLatestInProgress();
     return record?.result == GameResult.inProgress ? record : null;
   }
 

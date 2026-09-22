@@ -7,8 +7,11 @@ enum GameAudioCue {
   newGame(priority: 40, assetPath: 'sounds/newgame.wav'),
   illegalMove(priority: 50, assetPath: 'sounds/illegal.wav'),
   move(priority: 60, assetPath: 'sounds/move.wav'),
+  moveBlack(priority: 60, assetPath: 'sounds/move2.wav'),
   capture(priority: 70, assetPath: 'sounds/capture.wav'),
+  captureBlack(priority: 70, assetPath: 'sounds/capture2.wav'),
   check(priority: 80, assetPath: 'sounds/check.wav'),
+  checkBlack(priority: 80, assetPath: 'sounds/check2.wav'),
   win(priority: 100, assetPath: 'sounds/win.wav'),
   loss(priority: 100, assetPath: 'sounds/loss.wav'),
   draw(priority: 100, assetPath: 'sounds/draw.wav');

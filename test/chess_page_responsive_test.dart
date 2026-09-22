@@ -37,7 +37,7 @@ void main() {
 
     expect(find.byType(ChessBoard), findsOneWidget);
     expect(find.text('悔棋'), findsOneWidget);
-    expect(find.text('提示'), findsOneWidget);
+    expect(find.text('翻转'), findsOneWidget);
     expect(find.text('棋谱'), findsOneWidget);
     expect(find.text('红方 · 我'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -60,6 +60,26 @@ void main() {
     expect(find.byType(ChessBoard), findsOneWidget);
     expect(find.text('局面'), findsOneWidget);
     expect(find.text('棋谱将在落子后显示'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('short desktop window falls back to stacked layout', (
+    tester,
+  ) async {
+    await setViewport(tester, const Size(800, 600));
+    await openLocalGame(tester);
+
+    expect(find.byType(ChessBoard), findsOneWidget);
+    expect(find.text('局面'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('standard tablet desktop layout remains stable', (tester) async {
+    await setViewport(tester, const Size(1024, 768));
+    await openLocalGame(tester);
+
+    expect(find.byType(ChessBoard), findsOneWidget);
+    expect(find.text('局面'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
