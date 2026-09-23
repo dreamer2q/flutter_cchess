@@ -434,7 +434,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                 if (!didPop) _requestExit();
               },
               child: Scaffold(
-                backgroundColor: _GameColors.canvas,
+                backgroundColor: _GameColors.mobileCanvas,
                 body: LayoutBuilder(
                   builder: (context, constraints) {
                     final desktop = GameLayoutPolicy.useDesktop(
@@ -802,32 +802,37 @@ class _DesktopGameLayout extends StatelessWidget {
             desktop: true,
           ),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: EdgeInsets.only(right: 18),
-                        child: ChessBoard(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Expanded(
+                        child: Center(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: 24),
+                            child: ChessBoard(),
+                          ),
+                        ),
                       ),
-                    ),
+                      SizedBox(
+                        width: GameLayoutPolicy.inspectorWidth(
+                          constraints.maxWidth,
+                        ),
+                        child: _DesktopInspector(
+                          state: state,
+                          tab: inspectorTab,
+                          onTabChanged: onInspectorTabChanged,
+                          onSettings: onSettings,
+                          onMenu: onMenu,
+                        ),
+                      ),
+                    ],
                   ),
-                  SizedBox(
-                    width: GameLayoutPolicy.inspectorWidth(
-                      constraints.maxWidth,
-                    ),
-                    child: _DesktopInspector(
-                      state: state,
-                      tab: inspectorTab,
-                      onTabChanged: onInspectorTabChanged,
-                      onSettings: onSettings,
-                      onMenu: onMenu,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1022,48 +1027,39 @@ class _DesktopInspector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassSurface(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          children: [
-            _PlayerPanel(side: PlaySide.black, state: state),
-            const SizedBox(height: 12),
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                  value: 0,
-                  icon: Icon(Icons.list_alt),
-                  label: Text('棋谱'),
-                ),
-                ButtonSegment(
-                  value: 1,
-                  icon: Icon(Icons.tune),
-                  label: Text('局面'),
-                ),
-              ],
-              selected: {tab},
-              onSelectionChanged: (selection) => onTabChanged(selection.first),
+    return Column(
+      children: [
+        _PlayerPanel(side: PlaySide.black, state: state),
+        const SizedBox(height: 12),
+        SegmentedButton<int>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: 0,
+              icon: Icon(Icons.list_alt),
+              label: Text('棋谱'),
             ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: tab == 0
-                  ? _MoveHistory(state: state, embedded: true)
-                  : _PositionSummary(state: state),
-            ),
-            const SizedBox(height: 12),
-            _PlayerPanel(side: PlaySide.red, state: state),
-            const SizedBox(height: 10),
-            _GameCommandBar(
-              state: state,
-              onNotation: () => onTabChanged(0),
-              onMenu: onMenu,
-              desktop: true,
-            ),
+            ButtonSegment(value: 1, icon: Icon(Icons.tune), label: Text('局面')),
           ],
+          selected: {tab},
+          onSelectionChanged: (selection) => onTabChanged(selection.first),
         ),
-      ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: tab == 0
+              ? _MoveHistory(state: state, embedded: true)
+              : _PositionSummary(state: state),
+        ),
+        const SizedBox(height: 12),
+        _PlayerPanel(side: PlaySide.red, state: state),
+        const SizedBox(height: 10),
+        _GameCommandBar(
+          state: state,
+          onNotation: () => onTabChanged(0),
+          onMenu: onMenu,
+          desktop: true,
+        ),
+      ],
     );
   }
 }
@@ -1428,16 +1424,7 @@ class _DesktopBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Image.asset(
-          'assets/skins/night/background-desktop.png',
-          fit: BoxFit.cover,
-        ),
-        ColoredBox(color: _GameColors.canvas.withValues(alpha: .72)),
-      ],
-    );
+    return const ColoredBox(color: _GameColors.mobileCanvas);
   }
 }
 
@@ -1810,10 +1797,9 @@ String _moveLabel(MovePos move) {
 class _GameColors {
   const _GameColors._();
 
-  static const canvas = Color(0xFF171A1A);
-  static const mobileCanvas = Color(0xFFF3F1EC);
-  static const surface = Color(0xFFF9F8F5);
-  static const border = Color(0x33939B98);
+  static const mobileCanvas = Color(0xFFF0F2F1);
+  static const surface = Color(0xFFFFFFFF);
+  static const border = Color(0x33717F7B);
   static const ink = Color(0xFF202625);
   static const muted = Color(0xFF68716E);
   static const inactive = Color(0xFF9EA5A2);

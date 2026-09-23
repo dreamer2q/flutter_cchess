@@ -10,7 +10,7 @@ void main() {
 
   test('desktop inspector shrinks before the board', () {
     expect(GameLayoutPolicy.inspectorWidth(900), 280);
-    expect(GameLayoutPolicy.inspectorWidth(1200), 360);
-    expect(GameLayoutPolicy.inspectorWidth(2000), 360);
+    expect(GameLayoutPolicy.inspectorWidth(1200), 324);
+    expect(GameLayoutPolicy.inspectorWidth(2000), 340);
   });
 }

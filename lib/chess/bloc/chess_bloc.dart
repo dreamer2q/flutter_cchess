@@ -444,10 +444,29 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     _queuePersist(state.board);
   }
 
-  void _onRetryAi(ChessEventRetryAi event, Emitter<ChessState> emit) {
+  Future<void> _onRetryAi(
+    ChessEventRetryAi event,
+    Emitter<ChessState> emit,
+  ) async {
     if (!state.canRetryAi) return;
+    final engine = _engine;
+    if (engine == null) return;
+    final generation = ++_taskGeneration;
     emit(state.copyWith(phase: GamePhase.aiThinking, clearFailure: true));
-    _requestAiMove(fromRestoredPosition: true);
+    try {
+      await engine.restore(state.board.lastMoves.map((move) => move.mv));
+      if (emit.isDone || generation != _taskGeneration) return;
+      _requestAiMove(fromRestoredPosition: true);
+    } catch (error, stackTrace) {
+      addError(error, stackTrace);
+      if (emit.isDone || generation != _taskGeneration) return;
+      emit(
+        state.copyWith(
+          phase: GamePhase.failure,
+          failureMessage: '电脑引擎恢复失败，可以再次重试或切换本地双人。',
+        ),
+      );
+    }
   }
 
   Future<void> _onSwitchToLocal(
@@ -532,12 +551,15 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         .then((_) => store.save(record))
         .then(
           (_) {
-            if (!isClosed) add(_ChessEventPersistenceCompleted(revision, null));
+            if (!isClosed) {
+              add(_ChessEventPersistenceCompleted(revision, null));
+            }
           },
           onError: (Object error, StackTrace stackTrace) {
             addError(error, stackTrace);
-            if (!isClosed)
+            if (!isClosed) {
               add(_ChessEventPersistenceCompleted(revision, error));
+            }
           },
         );
   }

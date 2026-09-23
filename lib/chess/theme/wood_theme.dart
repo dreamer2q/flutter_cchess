@@ -26,7 +26,12 @@ class WoodsBoardTheme extends BoardTheme {
 
   @override
   Widget buildBoard(BuildContext context) {
-    return Image.asset(boardAsset);
+    return Image.asset(
+      boardAsset,
+      width: boardSize.width,
+      height: boardSize.height,
+      fit: BoxFit.fill,
+    );
   }
 
   @override
@@ -125,30 +130,22 @@ class WoodsBoardTheme extends BoardTheme {
 
   @override
   Widget buildSelectedPiece(BuildContext context, ChessPiece piece) {
-    return Container(
-      decoration: BoxDecoration(
-        boxShadow: const [
-          BoxShadow(
-            color: Color.fromRGBO(0, 0, 0, .2),
-            offset: Offset(2, 2),
-            blurRadius: 1,
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Color.fromRGBO(0, 0, 0, .1),
-            offset: Offset(3, 3),
-            blurRadius: 1,
-            spreadRadius: 1,
+    return SizedBox.square(
+      dimension: pieceSize,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          buildPiece(context, piece),
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF168A65), width: 2),
+              ),
+            ),
           ),
         ],
-        border: Border.all(
-          color: Colors.white54,
-          width: 2,
-          style: BorderStyle.solid,
-        ),
-        borderRadius: BorderRadius.all(Radius.circular(pieceSize / 2)),
       ),
-      child: buildPiece(context, piece),
     );
   }
 
@@ -172,7 +169,12 @@ class WoodsBoardTheme extends BoardTheme {
   Alignment getAlignment(PiecePos pos) {
     int x = SquareBoard.getFileX(pos.sq) - SquareBoard.FILE_LEFT,
         y = SquareBoard.getRankY(pos.sq) - SquareBoard.RANK_TOP;
-    return FractionalOffset(x / 8, y / 9);
+    final contentWidth = boardSize.width - boardPadding.horizontal;
+    final contentHeight = boardSize.height - boardPadding.vertical;
+    return Alignment(
+      x * 2 * pieceSize / (contentWidth - pieceSize) - 1,
+      y * 2 * pieceSize / (contentHeight - pieceSize) - 1,
+    );
   }
 
   @override

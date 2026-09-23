@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_cchess/chess/view/chess_page.dart';
+import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
+import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/main.dart';
 import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
@@ -41,6 +44,36 @@ void main() {
     expect(find.text('棋谱'), findsOneWidget);
     expect(find.text('红方 · 我'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('board taps follow classic skin intersections', (tester) async {
+    await setViewport(tester, const Size(390, 844));
+    await openLocalGame(tester);
+
+    final boardImage = find.image(
+      const AssetImage('assets/skins/woods/board.jpg'),
+    );
+    expect(boardImage, findsOneWidget);
+    final boardRect = tester.getRect(boardImage);
+    Offset intersection(int x, int y) => Offset(
+      boardRect.left + (32.5 + x * 57) * boardRect.width / 521,
+      boardRect.top + (31.5 + y * 57) * boardRect.height / 577,
+    );
+    final bloc = BlocProvider.of<ChessBloc>(
+      tester.element(find.byType(ChessBoard)),
+    );
+
+    await tester.tapAt(intersection(0, 9));
+    await tester.pump();
+    expect(bloc.state.selected?.sq, SquareBoard.coordXYFix(0, 9));
+
+    await tester.tapAt(intersection(0, 8));
+    await tester.pump();
+    expect(bloc.state.board.lastMoves, hasLength(1));
+    expect(
+      bloc.state.board.lastMoves.single.sqDst,
+      SquareBoard.coordXYFix(0, 8),
+    );
   });
 
   testWidgets('compact mobile viewport does not overflow', (tester) async {

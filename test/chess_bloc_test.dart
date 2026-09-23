@@ -100,6 +100,52 @@ void main() {
     await bloc.close();
   });
 
+  test('AI turn and pending animations reject all board input', () async {
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    await _initialize(bloc, PlayMode.withAI);
+    final human = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventMoveRequested(human));
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+
+    final ai = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventBoardTap(ai.srcPos));
+    bloc.add(ChessEventMoveRequested(ai));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(bloc.state.board.lastMoves, [human]);
+    expect(bloc.state.selected, isNull);
+    expect(bloc.state.canInteractBoard, isFalse);
+
+    engine.makeMoveCompleter.complete(ai.mv);
+    await _waitFor(bloc, (s) => s.board.lastMoves.length == 2);
+    final nextHuman = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventMoveRequested(nextHuman));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(bloc.state.board.lastMoves, [human, ai]);
+    expect(bloc.state.canInteractBoard, isFalse);
+
+    for (final effect in bloc.state.presentations.toList()) {
+      bloc.add(ChessEventPresentationAcknowledged(effect.id));
+      await _waitFor(bloc, (s) => s.activePresentation?.id != effect.id);
+    }
+    expect(bloc.state.canInteractBoard, isTrue);
+    await bloc.close();
+  });
+
+  test('real engine returns a legal reply to the opening move', () async {
+    final bloc = _bloc();
+    await _initialize(bloc, PlayMode.withAI);
+    final human = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventMoveRequested(human));
+    final reply = await bloc.stream
+        .firstWhere((state) => state.board.lastMoves.length == 2)
+        .timeout(const Duration(seconds: 20));
+    expect(reply.phase, GamePhase.playerTurn);
+    expect(reply.board.lastMoves.first, human);
+    expect(reply.board.isTurn(PlaySide.red), isTrue);
+    await bloc.close();
+  });
+
   test('restored AI turn resumes and commits the computer move', () async {
     final engine = ControlledChessEngine();
     final initial = FenUtil.parse(initialFenString);
@@ -114,6 +160,27 @@ void main() {
     engine.resumeMoveCompleter.complete(ai.mv);
     await _waitFor(bloc, (s) => s.board.lastMoves.length == 2);
     expect(bloc.state.board.lastMoves.last, ai);
+    await bloc.close();
+  });
+
+  test('retry restores the visible position before asking AI again', () async {
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    await _initialize(bloc, PlayMode.withAI);
+    final human = bloc.state.board.getMoves().first;
+    bloc.add(ChessEventMoveRequested(human));
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+    final legalAi = bloc.state.board.getMoves().first;
+    engine.makeMoveCompleter.complete(human.mv);
+    await _waitFor(bloc, (s) => s.phase == GamePhase.failure);
+
+    bloc.add(const ChessEventRetryAi());
+    await _waitFor(bloc, (s) => s.phase == GamePhase.aiThinking);
+    await Future<void>.delayed(Duration.zero);
+    expect(engine.restoredMoves, [human.mv]);
+    engine.resumeMoveCompleter.complete(legalAi.mv);
+    await _waitFor(bloc, (s) => s.board.lastMoves.length == 2);
+    expect(bloc.state.board.lastMoves, [human, legalAi]);
     await bloc.close();
   });
 

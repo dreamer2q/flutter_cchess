@@ -29,7 +29,12 @@ class AssetBoardTheme extends BoardTheme {
 
   @override
   Widget buildBoard(BuildContext context) {
-    return Image.asset(boardAsset, fit: BoxFit.fill);
+    return Image.asset(
+      boardAsset,
+      width: boardSize.width,
+      height: boardSize.height,
+      fit: BoxFit.fill,
+    );
   }
 
   @override
@@ -44,17 +49,25 @@ class AssetBoardTheme extends BoardTheme {
 
   @override
   Widget buildSelectedPiece(BuildContext context, ChessPiece piece) {
-    return Container(
-      width: pieceSize,
-      height: pieceSize,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFDA3A3D), width: 3),
-        boxShadow: const [
-          BoxShadow(color: Color(0x66DA3A3D), blurRadius: 8),
+    return SizedBox.square(
+      dimension: pieceSize,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          buildPiece(context, piece),
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF168A65), width: 3),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x55168A65), blurRadius: 8),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
-      child: buildPiece(context, piece),
     );
   }
 
