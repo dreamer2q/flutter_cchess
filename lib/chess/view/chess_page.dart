@@ -196,6 +196,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   var _inspectorTab = 0;
   var _resultShown = false;
   var _pausedByLifecycle = false;
+  var _allowPagePop = false;
 
   @override
   void initState() {
@@ -341,7 +342,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                     final homeButton = OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(dialogContext);
-                        Navigator.maybePop(context);
+                        unawaited(_requestExit());
                       },
                       icon: const Icon(Icons.home_outlined),
                       label: const Text('返回首页'),
@@ -396,7 +397,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     if (state.board.lastMoves.isEmpty || state.phase == GamePhase.finished) {
       await bloc.persistSnapshot();
       if (!mounted) return;
-      Navigator.maybePop(context);
+      await _popPage();
       return;
     }
     final leave = await showDialog<bool>(
@@ -418,8 +419,15 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     );
     if (leave == true && mounted) {
       await bloc.persistSnapshot();
-      if (mounted) Navigator.maybePop(context);
+      if (mounted) await _popPage();
     }
+  }
+
+  Future<void> _popPage() async {
+    if (!mounted) return;
+    setState(() => _allowPagePop = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _requestNewGame(ChessState state) async {
@@ -478,7 +486,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
         child: BlocBuilder<ChessBloc, ChessState>(
           builder: (context, state) {
             return PopScope(
-              canPop: false,
+              canPop: _allowPagePop,
               onPopInvokedWithResult: (didPop, result) {
                 if (!didPop) _requestExit();
               },
