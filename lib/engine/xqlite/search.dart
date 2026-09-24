@@ -26,6 +26,10 @@ class XqwlSearch {
   final Map<String, Map<int, int>> _bookByHistory = {};
   int nBookSize = 0;
   int mvResult = 0; // 电脑走的棋
+  // Search diagnostics are used by deterministic engine regression tests.
+  int nodesSearched = 0;
+  int transpositionCutoffs = 0;
+  int completedDepth = 0;
   final Stopwatch _searchClock = Stopwatch();
   int _maxThinkMs = 0;
   bool _searchAborted = false;
@@ -199,6 +203,7 @@ class XqwlSearch {
 
   int searchQuiesc(int vlAlpha, int vlBeta) {
     if (_shouldStop()) return pos.evaluate();
+    nodesSearched++;
     int i, nGenMoves;
     int vl, vlBest;
     List<int> mvs = [];
@@ -274,6 +279,7 @@ class XqwlSearch {
   /// 超出边界(Fail-Soft)的Alpha-Beta搜索过程
   int searchFull(int vlAlpha, int vlBeta, int nDepth, [bool bNoNull = false]) {
     if (_shouldStop()) return pos.evaluate();
+    if (nDepth > 0) nodesSearched++;
     int nHashFlag, vl, vlBest;
     int mv, mvBest, nNewDepth;
     List<int> mvHash = [0];
@@ -304,6 +310,7 @@ class XqwlSearch {
     // 1-3. 尝试置换表裁剪，并得到置换表走法
     final hashScore = probeHash(vlAlpha, vlBeta, nDepth, mvHash);
     if (hashScore != null) {
+      transpositionCutoffs++;
       return hashScore;
     }
 
@@ -424,6 +431,7 @@ class XqwlSearch {
   // 根节点的Alpha-Beta搜索过程
   int searchRoot(int nDepth) {
     int vl, vlBest, mv, nNewDepth;
+    nodesSearched++;
     vlBest = -XqwlPosition.MATE_VALUE;
     SortStruct sort = SortStruct.init(this, mvResult);
 
@@ -470,6 +478,9 @@ class XqwlSearch {
   }) {
     _maxThinkMs = maxThinkMs;
     _searchAborted = false;
+    nodesSearched = 0;
+    transpositionCutoffs = 0;
+    completedDepth = 0;
     _generation = (_generation + 1) & 0x7fffffff;
     if (_generation == 0) _generation = 1;
     _searchClock
@@ -538,6 +549,7 @@ class XqwlSearch {
         mvResult = fallbackMove;
         break;
       }
+      completedDepth = i;
       // 搜索到杀棋，就终止搜索
       if (vl > XqwlPosition.WIN_VALUE || vl < -XqwlPosition.WIN_VALUE) {
         break;
@@ -632,6 +644,7 @@ class SortStruct {
         mvs.removeWhere(
           (move) => s.pos.ucpcSquares[XqwlPosition.getDst(move)] != 0,
         );
+        nGenMoves = mvs.length;
         mvs.sort(s._compareHistory);
         nIndex = 0;
         _quietsGenerated = true;

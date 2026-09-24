@@ -1,4 +1,4 @@
-name: Build Android, iOS and macOS apps
+name: Test and build Android, iOS and macOS apps
 
 on: [push, pull_request, workflow_dispatch]
 
@@ -6,6 +6,31 @@ permissions:
   contents: read
 
 jobs:
+  ai-regression:
+    name: AI engine regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: .fvm/fvm_config.json
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run AI regression tests
+        run: >-
+          flutter test --no-pub
+          test/xqlite_search_hash_test.dart
+          test/xqlite_search_effectiveness_test.dart
+          test/chess_engine_strength_test.dart
+
   android:
     name: Android APK
     runs-on: ubuntu-latest
