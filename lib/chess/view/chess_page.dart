@@ -677,6 +677,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   }
 
   Future<void> _showSettings() async {
+    final themeBloc = context.read<ThemeBloc>();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -702,10 +703,6 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                     showSelectedIcon: false,
                     segments: const [
                       ButtonSegment(
-                        value: 'assets/skins/maple/config.json',
-                        label: Text('浅色枫木'),
-                      ),
-                      ButtonSegment(
                         value: 'assets/skins/night/config.json',
                         label: Text('夜间胡桃木'),
                       ),
@@ -717,7 +714,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                     selected: {_settings.themeConfigAsset},
                     onSelectionChanged: (selection) {
                       final asset = selection.first;
-                      context.read<ThemeBloc>().add(ThemeAssetRequested(asset));
+                      themeBloc.add(ThemeAssetRequested(asset));
                       update(_settings.copyWith(themeConfigAsset: asset));
                     },
                   ),

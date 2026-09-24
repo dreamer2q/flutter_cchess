@@ -75,8 +75,7 @@ class GameSettings {
     final storedThemeConfigAsset =
         json['themeConfigAsset'] ?? defaults.themeConfigAsset;
     final themeConfigAsset =
-        version == 1 &&
-            storedThemeConfigAsset == 'assets/skins/maple/config.json'
+        storedThemeConfigAsset == 'assets/skins/maple/config.json'
         ? defaultThemeConfigAsset
         : storedThemeConfigAsset;
     final soundEnabled = json['soundEnabled'] ?? defaults.soundEnabled;

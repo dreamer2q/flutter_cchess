@@ -73,9 +73,6 @@ flutter:
     - assets/skins/night/background-mobile.png
     - assets/skins/night/background-desktop.png
     - assets/skins/night/pieces/
-    - assets/skins/maple/config.json
-    - assets/skins/maple/board.png
-    - assets/skins/maple/pieces/
     - assets/images/
     - assets/engines/
     - assets/sounds/

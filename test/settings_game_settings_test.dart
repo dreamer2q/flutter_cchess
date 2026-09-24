@@ -44,7 +44,7 @@ void main() {
     expect(settings.motionPreference, MotionPreference.system);
   });
 
-  test('migrates the old default theme without disabling theme switching', () {
+  test('falls back when stored theme assets have been removed', () {
     final legacy = GameSettings.fromJson(<String, dynamic>{
       'schemaVersion': 1,
       'themeConfigAsset': 'assets/skins/maple/config.json',
@@ -55,7 +55,10 @@ void main() {
       'schemaVersion': 2,
       'themeConfigAsset': 'assets/skins/maple/config.json',
     });
-    expect(selectedMaple.themeConfigAsset, 'assets/skins/maple/config.json');
+    expect(
+      selectedMaple.themeConfigAsset,
+      GameSettings.defaultThemeConfigAsset,
+    );
   });
 
   test('rejects malformed and unsupported settings', () {
