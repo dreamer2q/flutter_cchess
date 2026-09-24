@@ -314,43 +314,41 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
         : winner == PlaySide.red
         ? '红方胜'
         : '黑方胜';
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isDismissible: false,
-      enableDrag: false,
-      showDragHandle: false,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.emoji_events_outlined, size: 42),
-              const SizedBox(height: 12),
-              Text(title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(
-                state.resultReason ?? '棋局已自动保存',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.emoji_events_outlined, size: 42),
+                const SizedBox(height: 12),
+                Text(title, style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                Text(
+                  state.resultReason ?? '棋局已自动保存',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final homeButton = OutlinedButton.icon(
                       onPressed: () {
-                        Navigator.pop(sheetContext);
+                        Navigator.pop(dialogContext);
                         Navigator.maybePop(context);
                       },
                       icon: const Icon(Icons.home_outlined),
                       label: const Text('返回首页'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
+                    );
+                    final replayButton = FilledButton.icon(
                       onPressed: () {
-                        Navigator.pop(sheetContext);
+                        Navigator.pop(dialogContext);
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
@@ -364,11 +362,28 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                       },
                       icon: const Icon(Icons.refresh),
                       label: const Text('再来一局'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                    );
+                    if (constraints.maxWidth < 400) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          homeButton,
+                          const SizedBox(height: 12),
+                          replayButton,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: homeButton),
+                        const SizedBox(width: 12),
+                        Expanded(child: replayButton),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
