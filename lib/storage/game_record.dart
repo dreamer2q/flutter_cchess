@@ -50,8 +50,13 @@ class GameRecord {
     this.redElapsedMs = 0,
     this.blackElapsedMs = 0,
     this.timeControlSeconds = 900,
-    this.aiStrength = AiStrength.normal,
-  }) : moves = List.unmodifiable(moves);
+    AiStrength aiStrength = AiStrength.normal,
+    int? aiMaxDepth,
+    int? aiMaxThinkMs,
+  }) : aiStrength = aiStrength,
+       aiMaxDepth = aiMaxDepth ?? aiStrength.maxDepth,
+       aiMaxThinkMs = aiMaxThinkMs ?? aiStrength.maxThinkMs,
+       moves = List.unmodifiable(moves);
 
   final String id;
   final String initialFen;
@@ -64,6 +69,8 @@ class GameRecord {
   final int blackElapsedMs;
   final int timeControlSeconds;
   final AiStrength aiStrength;
+  final int aiMaxDepth;
+  final int aiMaxThinkMs;
 
   GameRecord copyWith({
     String? id,
@@ -77,6 +84,8 @@ class GameRecord {
     int? blackElapsedMs,
     int? timeControlSeconds,
     AiStrength? aiStrength,
+    int? aiMaxDepth,
+    int? aiMaxThinkMs,
   }) {
     return GameRecord(
       id: id ?? this.id,
@@ -90,6 +99,8 @@ class GameRecord {
       blackElapsedMs: blackElapsedMs ?? this.blackElapsedMs,
       timeControlSeconds: timeControlSeconds ?? this.timeControlSeconds,
       aiStrength: aiStrength ?? this.aiStrength,
+      aiMaxDepth: aiMaxDepth ?? this.aiMaxDepth,
+      aiMaxThinkMs: aiMaxThinkMs ?? this.aiMaxThinkMs,
     );
   }
 
@@ -105,6 +116,8 @@ class GameRecord {
     'blackElapsedMs': blackElapsedMs,
     'timeControlSeconds': timeControlSeconds,
     'aiStrength': aiStrength.name,
+    'aiMaxDepth': aiMaxDepth,
+    'aiMaxThinkMs': aiMaxThinkMs,
   };
 
   String encode() => jsonEncode(toJson());
@@ -119,6 +132,12 @@ class GameRecord {
     final updatedAtValue = json['updatedAt'];
     final timeControlSeconds = json['timeControlSeconds'] ?? 0;
     final aiStrengthValue = json['aiStrength'];
+    if (aiStrengthValue != null && aiStrengthValue is! String) {
+      throw const FormatException('Invalid AI strength.');
+    }
+    final aiStrength = AiStrength.fromName(aiStrengthValue as String?);
+    final aiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
+    final aiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
 
     if (id is! String ||
         id.isEmpty ||
@@ -130,7 +149,12 @@ class GameRecord {
         updatedAtValue is! String ||
         timeControlSeconds is! int ||
         timeControlSeconds < 0 ||
-        (aiStrengthValue != null && aiStrengthValue is! String)) {
+        aiMaxDepth is! int ||
+        aiMaxDepth < 1 ||
+        aiMaxDepth > 64 ||
+        aiMaxThinkMs is! int ||
+        aiMaxThinkMs < 100 ||
+        aiMaxThinkMs > 10000) {
       throw const FormatException('Invalid game record.');
     }
     final createdAt = DateTime.tryParse(createdAtValue);
@@ -158,7 +182,9 @@ class GameRecord {
       redElapsedMs: _intValue(json['redElapsedMs']),
       blackElapsedMs: _intValue(json['blackElapsedMs']),
       timeControlSeconds: timeControlSeconds,
-      aiStrength: AiStrength.fromName(aiStrengthValue as String?),
+      aiStrength: aiStrength,
+      aiMaxDepth: aiMaxDepth,
+      aiMaxThinkMs: aiMaxThinkMs,
     );
   }
 

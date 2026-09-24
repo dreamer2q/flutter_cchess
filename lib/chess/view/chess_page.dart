@@ -33,12 +33,16 @@ class ChessPage extends StatefulWidget {
     this.initialRecord,
     this.timeControlSeconds = 900,
     this.aiStrength = AiStrength.normal,
+    this.aiMaxDepth,
+    this.aiMaxThinkMs,
   });
 
   final PlayMode playMode;
   final GameRecord? initialRecord;
   final int timeControlSeconds;
   final AiStrength aiStrength;
+  final int? aiMaxDepth;
+  final int? aiMaxThinkMs;
 
   @override
   State<ChessPage> createState() => _ChessPageState();
@@ -117,6 +121,18 @@ class _ChessPageState extends State<ChessPage> {
                       blackElapsedMs: widget.initialRecord?.blackElapsedMs ?? 0,
                       aiStrength:
                           widget.initialRecord?.aiStrength ?? widget.aiStrength,
+                      aiMaxDepth:
+                          widget.initialRecord?.aiMaxDepth ??
+                          widget.aiMaxDepth ??
+                          (widget.aiStrength == bootstrap.settings.aiStrength
+                              ? bootstrap.settings.aiMaxDepth
+                              : widget.aiStrength.maxDepth),
+                      aiMaxThinkMs:
+                          widget.initialRecord?.aiMaxThinkMs ??
+                          widget.aiMaxThinkMs ??
+                          (widget.aiStrength == bootstrap.settings.aiStrength
+                              ? bootstrap.settings.aiMaxThinkMs
+                              : widget.aiStrength.maxThinkMs),
                     ),
                   ),
             ),
@@ -246,11 +262,24 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
 
   Future<void> _saveSettings(GameSettings settings) async {
     final soundChanged = settings.soundEnabled != _settings.soundEnabled;
+    final aiSettingsChanged =
+        settings.aiStrength != _settings.aiStrength ||
+        settings.aiMaxDepth != _settings.aiMaxDepth ||
+        settings.aiMaxThinkMs != _settings.aiMaxThinkMs;
     setState(() => _settings = settings);
     if (soundChanged) {
       await _audioService.setEnabled(settings.soundEnabled);
     }
     await widget.settingsRepository.save(settings);
+    if (aiSettingsChanged) {
+      context.read<ChessBloc>().add(
+        ChessEventAiSettingsChanged(
+          aiStrength: settings.aiStrength,
+          aiMaxDepth: settings.aiMaxDepth,
+          aiMaxThinkMs: settings.aiMaxThinkMs,
+        ),
+      );
+    }
   }
 
   void _handleState(BuildContext context, ChessState state) {
@@ -918,7 +947,7 @@ class _PlayerPanel extends StatelessWidget {
                 children: [
                   Text(
                     state.playMode == PlayMode.withAI && !isPlayer
-                        ? '电脑 · ${_aiStrengthLabel(state.aiStrength)}'
+                        ? '电脑 · ${_aiStrengthLabel(state)}'
                         : side == PlaySide.red
                         ? '红方 · 我'
                         : '黑方 · 本地',
@@ -1844,11 +1873,18 @@ String _modeTitle(PlayMode mode) {
   return mode == PlayMode.withSelf ? '本地双人' : '人机对局';
 }
 
-String _aiStrengthLabel(AiStrength strength) => switch (strength) {
-  AiStrength.easy => '入门',
-  AiStrength.normal => '普通',
-  AiStrength.hard => '较强',
-};
+String _aiStrengthLabel(ChessState state) {
+  final strength = state.aiStrength;
+  if (state.aiMaxDepth != strength.maxDepth ||
+      state.aiMaxThinkMs != strength.maxThinkMs) {
+    return '自定义';
+  }
+  return switch (strength) {
+    AiStrength.easy => '入门',
+    AiStrength.normal => '普通',
+    AiStrength.hard => '较强',
+  };
+}
 
 String _clockLabel(ChessState state, PlaySide side) {
   if (state.timeControlSeconds == 0) return '不限时';

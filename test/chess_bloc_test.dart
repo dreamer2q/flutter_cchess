@@ -78,16 +78,33 @@ void main() {
 
   test('selected AI strength reaches the engine', () async {
     final engine = ControlledChessEngine();
-    final bloc = _bloc(engine: engine);
+    final repository = InMemoryGameRepository();
+    final bloc = _bloc(engine: engine, repository: repository);
     bloc.add(
       ChessEventInitialized(
         initialBoard: FenUtil.parse(initialFenString),
         aiStrength: AiStrength.hard,
+        aiMaxDepth: 11,
+        aiMaxThinkMs: 2800,
       ),
     );
     await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
     expect(engine.strength, AiStrength.hard);
+    expect(engine.maxDepth, 11);
+    expect(engine.maxThinkMs, 2800);
     expect(bloc.state.aiStrength, AiStrength.hard);
+
+    bloc.add(
+      const ChessEventAiSettingsChanged(
+        aiStrength: AiStrength.easy,
+        aiMaxDepth: 2,
+        aiMaxThinkMs: 450,
+      ),
+    );
+    await _waitFor(bloc, (s) => s.aiMaxDepth == 2);
+    await bloc.flushPersistence();
+    expect(engine.maxThinkMs, 450);
+    expect((await repository.getCurrent())?.aiMaxDepth, 2);
     await bloc.close();
   });
 
@@ -385,6 +402,8 @@ Future<ChessState> _waitFor(
 
 class ControlledChessEngine implements ChessEnginePort {
   AiStrength strength = AiStrength.normal;
+  int maxDepth = AiStrength.normal.maxDepth;
+  int maxThinkMs = AiStrength.normal.maxThinkMs;
   final Completer<int> makeMoveCompleter = Completer<int>();
   final Completer<int> hintCompleter = Completer<int>();
   final Completer<int> resumeMoveCompleter = Completer<int>();
@@ -392,7 +411,15 @@ class ControlledChessEngine implements ChessEnginePort {
   bool disposed = false;
 
   @override
-  Future<void> setStrength(AiStrength value) async => strength = value;
+  Future<void> setStrength(
+    AiStrength value, {
+    int? maxDepth,
+    int? maxThinkMs,
+  }) async {
+    strength = value;
+    this.maxDepth = maxDepth ?? value.maxDepth;
+    this.maxThinkMs = maxThinkMs ?? value.maxThinkMs;
+  }
 
   @override
   Future<int> makeMove(int mv) => makeMoveCompleter.future;

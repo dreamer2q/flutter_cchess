@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
@@ -6,7 +7,9 @@ import 'package:flutter_cchess/chess/notation/game_notation.dart';
 import 'package:flutter_cchess/chess/theme/wood_theme.dart';
 import 'package:flutter_cchess/chess/view/chess_page.dart';
 import 'package:flutter_cchess/help/help_pages.dart';
+import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
+import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/utils/fen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,24 +23,32 @@ class NewChessPage extends StatefulWidget {
 }
 
 class _NewChessPageState extends State<NewChessPage> {
-  late Future<GameRecord?> _currentGame = _loadCurrentGame();
+  late Future<_HomeData> _homeData = _loadHomeData();
   int _timeControlSeconds = 900;
-  AiStrength _aiStrength = AiStrength.normal;
+  AiStrength? _selectedStrength;
 
-  Future<GameRecord?> _loadCurrentGame() async {
+  Future<_HomeData> _loadHomeData() async {
     final preferences = await SharedPreferences.getInstance();
     final record = await SharedPreferencesGameRepository(
       preferences,
     ).getLatestInProgress();
-    return record?.result == GameResult.inProgress ? record : null;
+    final settings = await SharedPreferencesGameSettingsRepository(
+      preferences,
+    ).load();
+    return _HomeData(
+      currentGame: record?.result == GameResult.inProgress ? record : null,
+      settings: settings,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<GameRecord?>(
-      future: _currentGame,
+    return FutureBuilder<_HomeData>(
+      future: _homeData,
       builder: (context, snapshot) {
-        final currentGame = snapshot.data;
+        final data = snapshot.data ?? const _HomeData();
+        final currentGame = data.currentGame;
+        final aiStrength = _selectedStrength ?? data.settings.aiStrength;
         return Scaffold(
           backgroundColor: const Color(0xFFF0F2F1),
           body: SafeArea(
@@ -46,32 +57,36 @@ class _NewChessPageState extends State<NewChessPage> {
                 final desktop = constraints.maxWidth >= 860;
                 return Column(
                   children: [
-                    _HomeHeader(onHelp: _openRules, onAbout: _openAbout),
+                    _HomeHeader(
+                      onHelp: _openRules,
+                      onAbout: _openAbout,
+                      onSettings: () => _openSettings(data.settings),
+                    ),
                     Expanded(
                       child: desktop
                           ? _DesktopHome(
                               currentGame: currentGame,
-                              onOpen: _openGame,
+                              onOpen: (mode) => _openGame(mode, data.settings),
                               onContinue: _continueGame,
                               onImport: _importRecord,
                               timeControlSeconds: _timeControlSeconds,
-                              aiStrength: _aiStrength,
+                              aiStrength: aiStrength,
                               onTimeChanged: (value) =>
                                   setState(() => _timeControlSeconds = value),
                               onStrengthChanged: (value) =>
-                                  setState(() => _aiStrength = value),
+                                  setState(() => _selectedStrength = value),
                             )
                           : _MobileHome(
                               currentGame: currentGame,
-                              onOpen: _openGame,
+                              onOpen: (mode) => _openGame(mode, data.settings),
                               onContinue: _continueGame,
                               onImport: _importRecord,
                               timeControlSeconds: _timeControlSeconds,
-                              aiStrength: _aiStrength,
+                              aiStrength: aiStrength,
                               onTimeChanged: (value) =>
                                   setState(() => _timeControlSeconds = value),
                               onStrengthChanged: (value) =>
-                                  setState(() => _aiStrength = value),
+                                  setState(() => _selectedStrength = value),
                             ),
                     ),
                   ],
@@ -84,17 +99,25 @@ class _NewChessPageState extends State<NewChessPage> {
     );
   }
 
-  Future<void> _openGame(PlayMode playMode) async {
+  Future<void> _openGame(PlayMode playMode, GameSettings settings) async {
+    final strength = _selectedStrength ?? settings.aiStrength;
+    final usesConfiguredLimits = strength == settings.aiStrength;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChessPage(
           playMode: playMode,
           timeControlSeconds: _timeControlSeconds,
-          aiStrength: _aiStrength,
+          aiStrength: strength,
+          aiMaxDepth: usesConfiguredLimits
+              ? settings.aiMaxDepth
+              : strength.maxDepth,
+          aiMaxThinkMs: usesConfiguredLimits
+              ? settings.aiMaxThinkMs
+              : strength.maxThinkMs,
         ),
       ),
     );
-    _reloadCurrentGame();
+    _reloadHome();
   }
 
   Future<void> _continueGame(GameRecord record) async {
@@ -106,7 +129,7 @@ class _NewChessPageState extends State<NewChessPage> {
         builder: (_) => ChessPage(playMode: mode, initialRecord: record),
       ),
     );
-    _reloadCurrentGame();
+    _reloadHome();
   }
 
   Future<void> _openRules() => Navigator.of(context).push<void>(
@@ -143,22 +166,58 @@ class _NewChessPageState extends State<NewChessPage> {
     }
   }
 
-  void _reloadCurrentGame() {
-    if (mounted) setState(() => _currentGame = _loadCurrentGame());
+  Future<void> _openSettings(GameSettings settings) async {
+    final preferences = await SharedPreferences.getInstance();
+    final repository = SharedPreferencesGameSettingsRepository(preferences);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => BlocProvider(
+          create: (_) =>
+              ThemeBloc()..add(ThemeAssetRequested(settings.themeConfigAsset)),
+          child: GameSettingsPage(
+            initialSettings: settings,
+            onSettingsChanged: repository.save,
+          ),
+        ),
+      ),
+    );
+    _reloadHome();
+  }
+
+  void _reloadHome() {
+    if (mounted) {
+      setState(() {
+        _selectedStrength = null;
+        _homeData = _loadHomeData();
+      });
+    }
   }
 }
 
+class _HomeData {
+  const _HomeData({this.currentGame, this.settings = const GameSettings()});
+
+  final GameRecord? currentGame;
+  final GameSettings settings;
+}
+
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({required this.onHelp, required this.onAbout});
+  const _HomeHeader({
+    required this.onHelp,
+    required this.onAbout,
+    required this.onSettings,
+  });
 
   final VoidCallback onHelp;
   final VoidCallback onAbout;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final showMode = constraints.maxWidth >= 350;
+        final showMode = constraints.maxWidth >= 420;
         return SizedBox(
           height: 64,
           child: Padding(
@@ -194,6 +253,11 @@ class _HomeHeader extends StatelessWidget {
                   tooltip: '关于中国象棋',
                   onPressed: onAbout,
                   icon: const Icon(Icons.info_outline_rounded),
+                ),
+                IconButton(
+                  tooltip: '设置',
+                  onPressed: onSettings,
+                  icon: const Icon(Icons.settings_outlined),
                 ),
               ],
             ),

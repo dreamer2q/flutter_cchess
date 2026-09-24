@@ -14,6 +14,8 @@ class ChessEventInitialized extends ChessEvent {
     this.redElapsedMs = 0,
     this.blackElapsedMs = 0,
     this.aiStrength = AiStrength.normal,
+    this.aiMaxDepth,
+    this.aiMaxThinkMs,
   });
   final Board initialBoard;
   final PlayMode playMode;
@@ -21,6 +23,10 @@ class ChessEventInitialized extends ChessEvent {
   final int redElapsedMs;
   final int blackElapsedMs;
   final AiStrength aiStrength;
+  final int? aiMaxDepth;
+  final int? aiMaxThinkMs;
+  int get resolvedAiMaxDepth => aiMaxDepth ?? aiStrength.maxDepth;
+  int get resolvedAiMaxThinkMs => aiMaxThinkMs ?? aiStrength.maxThinkMs;
   @override
   List<Object?> get props => [
     initialBoard,
@@ -29,7 +35,24 @@ class ChessEventInitialized extends ChessEvent {
     redElapsedMs,
     blackElapsedMs,
     aiStrength,
+    aiMaxDepth,
+    aiMaxThinkMs,
   ];
+}
+
+class ChessEventAiSettingsChanged extends ChessEvent {
+  const ChessEventAiSettingsChanged({
+    required this.aiStrength,
+    required this.aiMaxDepth,
+    required this.aiMaxThinkMs,
+  });
+
+  final AiStrength aiStrength;
+  final int aiMaxDepth;
+  final int aiMaxThinkMs;
+
+  @override
+  List<Object?> get props => [aiStrength, aiMaxDepth, aiMaxThinkMs];
 }
 
 class ChessEventBoardTap extends ChessEvent {

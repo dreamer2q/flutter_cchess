@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 
 import 'game_settings.dart';
@@ -93,6 +94,7 @@ class _GameSettingsPageState extends State<GameSettingsPage> {
 
 enum _SettingsSection {
   appearance('棋盘外观', '更换棋盘主题与棋子风格', Icons.palette_outlined),
+  ai('电脑对手', '设置电脑强度与单步搜索上限', Icons.smart_toy_outlined),
   feedback('声音与触觉', '控制对局中的声音与设备反馈', Icons.volume_up_outlined),
   motion('动态效果', '调整棋子动画与界面动效', Icons.motion_photos_on_outlined);
 
@@ -205,6 +207,7 @@ class _SettingsDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final detail = switch (section) {
       _SettingsSection.appearance => _appearance(context),
+      _SettingsSection.ai => _ai(context),
       _SettingsSection.feedback => _feedback(context),
       _SettingsSection.motion => _motion(context),
     };
@@ -296,6 +299,38 @@ class _SettingsDetail extends StatelessWidget {
     );
   }
 
+  Widget _ai(BuildContext context) {
+    return _SettingsGroup(
+      title: '电脑思考',
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: SegmentedButton<AiStrength>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: AiStrength.easy, label: Text('入门')),
+              ButtonSegment(value: AiStrength.normal, label: Text('普通')),
+              ButtonSegment(value: AiStrength.hard, label: Text('较强')),
+            ],
+            selected: {settings.aiStrength},
+            onSelectionChanged: (selection) {
+              final strength = selection.first;
+              onUpdate(
+                settings.copyWith(
+                  aiStrength: strength,
+                  aiMaxDepth: strength.maxDepth,
+                  aiMaxThinkMs: strength.maxThinkMs,
+                ),
+              );
+            },
+          ),
+        ),
+        const _SettingsDivider(),
+        _AiSearchLimits(settings: settings, onUpdate: onUpdate),
+      ],
+    );
+  }
+
   Widget _motion(BuildContext context) {
     return _SettingsGroup(
       title: '棋子与界面',
@@ -329,6 +364,105 @@ class _SettingsDetail extends StatelessWidget {
       ],
     );
   }
+}
+
+class _AiSearchLimits extends StatefulWidget {
+  const _AiSearchLimits({required this.settings, required this.onUpdate});
+
+  final GameSettings settings;
+  final ValueChanged<GameSettings> onUpdate;
+
+  @override
+  State<_AiSearchLimits> createState() => _AiSearchLimitsState();
+}
+
+class _AiSearchLimitsState extends State<_AiSearchLimits> {
+  late double _depth = widget.settings.aiMaxDepth.toDouble();
+  late double _thinkMs = widget.settings.aiMaxThinkMs.toDouble();
+
+  @override
+  void didUpdateWidget(covariant _AiSearchLimits oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings.aiMaxDepth != widget.settings.aiMaxDepth) {
+      _depth = widget.settings.aiMaxDepth.toDouble();
+    }
+    if (oldWidget.settings.aiMaxThinkMs != widget.settings.aiMaxThinkMs) {
+      _thinkMs = widget.settings.aiMaxThinkMs.toDouble();
+    }
+  }
+
+  bool get _isCustom =>
+      _depth.round() != widget.settings.aiStrength.maxDepth ||
+      _thinkMs.round() != widget.settings.aiStrength.maxThinkMs;
+
+  @override
+  Widget build(BuildContext context) {
+    final depth = _depth.round();
+    final thinkMs = _thinkMs.round();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isCustom)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '已自定义搜索参数',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: const Color(0xFF176B50),
+                ),
+              ),
+            ),
+          Row(
+            children: [
+              const Expanded(child: Text('搜索深度上限')),
+              Text('$depth 层'),
+            ],
+          ),
+          Slider(
+            value: _depth,
+            min: 1,
+            max: 64,
+            divisions: 63,
+            label: '$depth 层',
+            onChanged: (value) => setState(() => _depth = value),
+            onChangeEnd: (value) => widget.onUpdate(
+              widget.settings.copyWith(aiMaxDepth: value.round()),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Expanded(child: Text('每步思考上限')),
+              Text(_formatThinkTime(thinkMs)),
+            ],
+          ),
+          Slider(
+            value: _thinkMs,
+            min: 100,
+            max: 10000,
+            divisions: 99,
+            label: _formatThinkTime(thinkMs),
+            onChanged: (value) => setState(() => _thinkMs = value),
+            onChangeEnd: (value) => widget.onUpdate(
+              widget.settings.copyWith(aiMaxThinkMs: value.round()),
+            ),
+          ),
+          Text(
+            '设置的是搜索上限；局面简单时电脑可能更快落子。',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xFF68716E)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatThinkTime(int milliseconds) => milliseconds < 1000
+      ? '$milliseconds 毫秒'
+      : '${(milliseconds / 1000).toStringAsFixed(milliseconds % 1000 == 0 ? 0 : 1)} 秒';
 }
 
 class _SettingsGroup extends StatelessWidget {

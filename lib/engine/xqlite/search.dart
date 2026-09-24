@@ -28,8 +28,13 @@ class XqwlSearch {
   late List<BookItem> bookTable; // [BOOK_SIZE] 开局库
   int nBookSize = 0; // 开局库大小
   int mvResult = 0; // 电脑走的棋
+  final Stopwatch _searchClock = Stopwatch();
+  int _maxThinkMs = 0;
 
   final pos = XqwlPosition();
+
+  bool get _timeLimitReached =>
+      _maxThinkMs > 0 && _searchClock.elapsedMilliseconds >= _maxThinkMs;
 
   // "qsort"按历史表排序的比较函数
   int _compareHistory(int lpmv1, int lpmv2) {
@@ -145,6 +150,7 @@ class XqwlSearch {
   }
 
   int searchQuiesc(int vlAlpha, int vlBeta) {
+    if (_timeLimitReached) return pos.evaluate();
     int i, nGenMoves;
     int vl, vlBest;
     List<int> mvs = [];
@@ -193,6 +199,7 @@ class XqwlSearch {
       if (pos.makeMove(mvs[i])) {
         vl = -searchQuiesc(-vlBeta, -vlAlpha);
         pos.undoMakeMove();
+        if (_timeLimitReached) break;
 
         // 8. 进行Alpha-Beta大小判断和截断
         if (vl > vlBest) {
@@ -218,6 +225,7 @@ class XqwlSearch {
 
   /// 超出边界(Fail-Soft)的Alpha-Beta搜索过程
   int searchFull(int vlAlpha, int vlBeta, int nDepth, [bool bNoNull = false]) {
+    if (_timeLimitReached) return pos.evaluate();
     int nHashFlag, vl, vlBest;
     int mv, mvBest, nNewDepth;
     List<int> mvHash = [0];
@@ -261,6 +269,7 @@ class XqwlSearch {
         NO_NULL,
       );
       pos.undoNullMove();
+      if (_timeLimitReached) return pos.evaluate();
       if (vl >= vlBeta) {
         return vl;
       }
@@ -289,6 +298,7 @@ class XqwlSearch {
           }
         }
         pos.undoMakeMove();
+        if (_timeLimitReached) break;
 
         // 5. 进行Alpha-Beta大小判断和截断
         if (vl > vlBest) {
@@ -333,6 +343,7 @@ class XqwlSearch {
     SortStruct sort = SortStruct.init(this, mvResult);
 
     while ((mv = sort.next()) != 0) {
+      if (_timeLimitReached) break;
       if (pos.makeMove(mv)) {
         nNewDepth = pos.inCheck() ? nDepth : nDepth - 1;
         if (vlBest == -XqwlPosition.MATE_VALUE) {
@@ -354,6 +365,7 @@ class XqwlSearch {
           }
         }
         pos.undoMakeMove();
+        if (_timeLimitReached) break;
         if (vl > vlBest) {
           vlBest = vl;
           mvResult = mv;
@@ -376,6 +388,10 @@ class XqwlSearch {
     int maxDepth = XqwlPosition.LIMIT_DEPTH,
     int maxThinkMs = 5000,
   }) {
+    _maxThinkMs = maxThinkMs;
+    _searchClock
+      ..reset()
+      ..start();
     List<int> mvs = [];
 
     // 初始化
@@ -410,11 +426,11 @@ class XqwlSearch {
       }
     }
     if (vl == 1) {
+      _searchClock.stop();
       return;
     }
 
     // 迭代加深过程
-    final t = DateTime.now(); // 初始化定时器
     for (int i = 1; i <= maxDepth && i <= XqwlPosition.LIMIT_DEPTH; i++) {
       // int vl = searchFull(-XqwlPosition.MATE_VALUE, XqwlPosition.MATE_VALUE, i);
       vl = searchRoot(i);
@@ -423,10 +439,9 @@ class XqwlSearch {
         break;
       }
       // 超过一秒，就终止搜索
-      if (DateTime.now().difference(t).inMilliseconds >= maxThinkMs) {
-        break;
-      }
+      if (_timeLimitReached) break;
     }
+    _searchClock.stop();
   }
 }
 

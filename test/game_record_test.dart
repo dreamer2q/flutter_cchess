@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
 import 'package:flutter_cchess/storage/storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,6 +16,9 @@ void main() {
     updatedAt: updatedAt,
     redElapsedMs: 1200,
     blackElapsedMs: 800,
+    aiStrength: AiStrength.hard,
+    aiMaxDepth: 11,
+    aiMaxThinkMs: 2800,
   );
 
   test('round trips a game record through JSON', () {
@@ -26,6 +30,16 @@ void main() {
       () => GameRecord.fromJson(<String, dynamic>{'id': 'broken'}),
       throwsFormatException,
     );
+  });
+
+  test('legacy records inherit the selected difficulty limits', () {
+    final legacy = record.toJson()
+      ..remove('aiMaxDepth')
+      ..remove('aiMaxThinkMs');
+
+    final migrated = GameRecord.fromJson(legacy);
+    expect(migrated.aiMaxDepth, AiStrength.hard.maxDepth);
+    expect(migrated.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
   });
 
   test('in-memory repository saves, lists, and deletes records', () async {

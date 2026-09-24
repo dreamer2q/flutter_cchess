@@ -29,6 +29,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
        createdAt = createdAt ?? DateTime.now(),
        super(ChessState(board: Board(BuiltList<BoardAction>()))) {
     on<ChessEventInitialized>(_onInitialized);
+    on<ChessEventAiSettingsChanged>(_onAiSettingsChanged);
     on<ChessEventBoardTap>(_onBoardTapped);
     on<ChessEventMoveRequested>(_onMoveRequested);
     on<ChessEventPresentationAcknowledged>(_onPresentationAcknowledged);
@@ -89,13 +90,19 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         redElapsedMs: event.redElapsedMs,
         blackElapsedMs: event.blackElapsedMs,
         aiStrength: event.aiStrength,
+        aiMaxDepth: event.resolvedAiMaxDepth,
+        aiMaxThinkMs: event.resolvedAiMaxThinkMs,
       ),
     );
     try {
       switch (event.playMode) {
         case PlayMode.withAI:
           _engine = _providedEngine ?? ChessEngine();
-          await _engine!.setStrength(event.aiStrength);
+          await _engine!.setStrength(
+            event.aiStrength,
+            maxDepth: event.resolvedAiMaxDepth,
+            maxThinkMs: event.resolvedAiMaxThinkMs,
+          );
           await _engine!.restore(event.initialBoard.lastMoves.map((m) => m.mv));
           break;
         case PlayMode.withSelf:
@@ -134,6 +141,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           redElapsedMs: event.redElapsedMs,
           blackElapsedMs: event.blackElapsedMs,
           aiStrength: event.aiStrength,
+          aiMaxDepth: event.resolvedAiMaxDepth,
+          aiMaxThinkMs: event.resolvedAiMaxThinkMs,
         ),
       );
       if (_clock!.isExpired(event.initialBoard.innerBoard.sdPlayer)) {
@@ -160,6 +169,25 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         ),
       );
     }
+  }
+
+  Future<void> _onAiSettingsChanged(
+    ChessEventAiSettingsChanged event,
+    Emitter<ChessState> emit,
+  ) async {
+    await _engine?.setStrength(
+      event.aiStrength,
+      maxDepth: event.aiMaxDepth,
+      maxThinkMs: event.aiMaxThinkMs,
+    );
+    emit(
+      state.copyWith(
+        aiStrength: event.aiStrength,
+        aiMaxDepth: event.aiMaxDepth,
+        aiMaxThinkMs: event.aiMaxThinkMs,
+      ),
+    );
+    _queuePersist(state.board);
   }
 
   void _onBoardTapped(ChessEventBoardTap event, Emitter<ChessState> emit) {
@@ -733,6 +761,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       blackElapsedMs: clock.blackElapsedMs,
       timeControlSeconds: state.timeControlSeconds,
       aiStrength: state.aiStrength,
+      aiMaxDepth: state.aiMaxDepth,
+      aiMaxThinkMs: state.aiMaxThinkMs,
     );
   }
 
