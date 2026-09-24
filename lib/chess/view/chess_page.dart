@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_cchess/audio/audio.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
+import 'package:flutter_cchess/chess/notation/chinese_notation.dart';
 import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/chess/presentation/game_presentation_coordinator.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
@@ -1048,7 +1049,7 @@ class _MoveHistory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final moves = state.board.lastMoves;
+    final moves = ChineseChessNotation.formatHistory(state.board);
     final content = moves.isEmpty
         ? const Center(
             child: Column(
@@ -1061,26 +1062,50 @@ class _MoveHistory extends StatelessWidget {
             ),
           )
         : ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 5),
             itemCount: (moves.length + 1) ~/ 2,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
-              final redIndex = index * 2;
-              final blackIndex = redIndex + 1;
+              final firstIndex = index * 2;
+              final first = moves[firstIndex];
+              final second = firstIndex + 1 < moves.length
+                  ? moves[firstIndex + 1]
+                  : null;
+              final redMove = first.isRed
+                  ? first
+                  : second?.isRed == true
+                  ? second
+                  : null;
+              final blackMove = first.isRed ? second : first;
               return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 10,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                 child: Row(
                   children: [
-                    SizedBox(width: 32, child: Text('${index + 1}')),
-                    Expanded(child: Text(_moveLabel(moves[redIndex]))),
-                    Expanded(
+                    SizedBox(
+                      width: 58,
                       child: Text(
-                        blackIndex < moves.length
-                            ? _moveLabel(moves[blackIndex])
-                            : '…',
+                        '第${index + 1}回合',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: _GameColors.muted,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _MoveNotationCell(
+                        move: redMove,
+                        latest:
+                            firstIndex + (first.isRed ? 0 : 1) ==
+                            moves.length - 1,
+                        red: true,
+                      ),
+                    ),
+                    Expanded(
+                      child: _MoveNotationCell(
+                        move: blackMove,
+                        latest:
+                            firstIndex + (first.isRed ? 1 : 0) ==
+                            moves.length - 1,
+                        red: false,
                       ),
                     ),
                   ],
@@ -1088,7 +1113,59 @@ class _MoveHistory extends StatelessWidget {
               );
             },
           );
-    if (embedded) return content;
+    if (moves.isEmpty) {
+      if (embedded) return content;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('本局棋谱', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 10),
+            Expanded(child: content),
+          ],
+        ),
+      );
+    }
+    final moveHeader = Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 58,
+            child: Text('回合', style: Theme.of(context).textTheme.labelSmall),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                '红方',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: const Color(0xFFB23B38),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                '黑方',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: _GameColors.ink),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (embedded) {
+      return Column(
+        children: [
+          moveHeader,
+          Expanded(child: content),
+        ],
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
       child: Column(
@@ -1096,8 +1173,44 @@ class _MoveHistory extends StatelessWidget {
         children: [
           Text('本局棋谱', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 10),
+          moveHeader,
           Expanded(child: content),
         ],
+      ),
+    );
+  }
+}
+
+class _MoveNotationCell extends StatelessWidget {
+  const _MoveNotationCell({
+    required this.move,
+    required this.latest,
+    required this.red,
+  });
+
+  final ChineseNotationMove? move;
+  final bool latest;
+  final bool red;
+
+  @override
+  Widget build(BuildContext context) {
+    if (move == null) return const Center(child: Text('—'));
+    return Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      decoration: BoxDecoration(
+        color: latest ? const Color(0x182D9B73) : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        move!.text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: red ? const Color(0xFF9D3835) : _GameColors.ink,
+          fontWeight: latest ? FontWeight.w700 : FontWeight.w500,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
       ),
     );
   }
@@ -1792,14 +1905,6 @@ String _pieceSemantic(ChessPiece piece, PiecePos position) {
   final file = SquareBoard.getFileX(position.sq) - SquareBoard.FILE_LEFT + 1;
   final rank = SquareBoard.getRankY(position.sq) - SquareBoard.RANK_TOP + 1;
   return '$side${names[piece.numTag]}，第$file路，第$rank线';
-}
-
-String _moveLabel(MovePos move) {
-  final srcFile = SquareBoard.getFileX(move.sqSrc) - SquareBoard.FILE_LEFT + 1;
-  final srcRank = SquareBoard.getRankY(move.sqSrc) - SquareBoard.RANK_TOP + 1;
-  final dstFile = SquareBoard.getFileX(move.sqDst) - SquareBoard.FILE_LEFT + 1;
-  final dstRank = SquareBoard.getRankY(move.sqDst) - SquareBoard.RANK_TOP + 1;
-  return '$srcFile,$srcRank → $dstFile,$dstRank';
 }
 
 class _GameColors {
