@@ -10,7 +10,6 @@ import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
 import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/chess/presentation/game_presentation_coordinator.dart';
-import 'package:flutter_cchess/chess/widget/animated_captured_piece.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_move.dart';
 import 'package:flutter_cchess/chess/widget/animated_overlay.dart';
@@ -1679,22 +1678,8 @@ class _ChessBoardState extends State<ChessBoard> {
                                     button: true,
                                     label: _pieceSemantic(pair.piece, pair.pos),
                                     child:
-                                        effect?.kind ==
-                                                PresentationEffectKind.move &&
-                                            effect?.capturedPiece != null &&
-                                            effect?.move.sqDst == pair.sq &&
-                                            animating
-                                        ? AnimatedCapturedPiece(
-                                            key: ValueKey(
-                                              'captured-${effect!.id}',
-                                            ),
-                                            child: theme.buildPiece(
-                                              context,
-                                              pair.piece,
-                                            ),
-                                          )
-                                        : state.selected?.sq == pair.sq &&
-                                              !animating
+                                        state.selected?.sq == pair.sq &&
+                                            !animating
                                         ? theme.buildSelectedPiece(
                                             context,
                                             pair.piece,

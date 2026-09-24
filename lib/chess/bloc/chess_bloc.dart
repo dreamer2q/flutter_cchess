@@ -316,7 +316,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   ) {
     final active = state.activePresentation;
     if (active == null || active.id != event.effectId) return;
-    if (active.tacticalEffect == null) {
+    if (active.tacticalEffect == null ||
+        active.tacticalEffect == PlayEffect.eat) {
       add(ChessEventPresentationAcknowledged(event.effectId));
       return;
     }
