@@ -5,6 +5,7 @@ import 'package:flutter_cchess/chess/game/ai_strength.dart';
 import 'package:flutter_cchess/chess/notation/game_notation.dart';
 import 'package:flutter_cchess/chess/theme/wood_theme.dart';
 import 'package:flutter_cchess/chess/view/chess_page.dart';
+import 'package:flutter_cchess/help/help_pages.dart';
 import 'package:flutter_cchess/storage/storage.dart';
 import 'package:flutter_cchess/utils/fen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,7 +46,7 @@ class _NewChessPageState extends State<NewChessPage> {
                 final desktop = constraints.maxWidth >= 860;
                 return Column(
                   children: [
-                    const _HomeHeader(),
+                    _HomeHeader(onHelp: _openRules, onAbout: _openAbout),
                     Expanded(
                       child: desktop
                           ? _DesktopHome(
@@ -108,6 +109,14 @@ class _NewChessPageState extends State<NewChessPage> {
     _reloadCurrentGame();
   }
 
+  Future<void> _openRules() => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(builder: (_) => const XiangqiRulesPage()),
+  );
+
+  Future<void> _openAbout() => Navigator.of(
+    context,
+  ).push<void>(MaterialPageRoute<void>(builder: (_) => const AboutPage()));
+
   Future<void> _importRecord() async {
     try {
       final file = await (widget.pickNotationFile?.call() ?? openFile());
@@ -140,35 +149,57 @@ class _NewChessPageState extends State<NewChessPage> {
 }
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  const _HomeHeader({required this.onHelp, required this.onAbout});
+
+  final VoidCallback onHelp;
+  final VoidCallback onAbout;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 64,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          children: [
-            const Icon(Icons.grid_4x4, color: Color(0xFF202625), size: 22),
-            const SizedBox(width: 12),
-            Text(
-              '中国象棋',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: const Color(0xFF202625),
-                fontWeight: FontWeight.w700,
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showMode = constraints.maxWidth >= 350;
+        return SizedBox(
+          height: 64,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                const Icon(Icons.grid_4x4, color: Color(0xFF202625), size: 22),
+                const SizedBox(width: 12),
+                Text(
+                  '中国象棋',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: const Color(0xFF202625),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                if (showMode)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text(
+                      '离线对局',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF68716E),
+                      ),
+                    ),
+                  ),
+                IconButton(
+                  tooltip: '象棋规则',
+                  onPressed: onHelp,
+                  icon: const Icon(Icons.help_outline_rounded),
+                ),
+                IconButton(
+                  tooltip: '关于中国象棋',
+                  onPressed: onAbout,
+                  icon: const Icon(Icons.info_outline_rounded),
+                ),
+              ],
             ),
-            const Spacer(),
-            Text(
-              '离线对局',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF68716E)),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
