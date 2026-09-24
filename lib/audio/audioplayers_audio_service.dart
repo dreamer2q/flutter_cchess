@@ -10,7 +10,7 @@ import 'game_audio_cue.dart';
 class AudioplayersAudioService implements AudioService {
   AudioplayersAudioService({
     bool enabled = true,
-    double volume = 0.8,
+    double volume = 0.45,
     AudioCache? audioCache,
     AudioContext? audioContext,
   }) : assert(volume >= 0 && volume <= 1),
