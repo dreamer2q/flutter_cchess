@@ -3,13 +3,14 @@ import 'dart:math';
 import 'package:flutter_cchess/engine/xqlite/position.dart';
 
 class HashItem {
+  bool valid = false;
   int ucDepth = 0;
   int ucFlag = 0;
   int svl = 0;
   int wmv = 0;
-  int wReserved = 0;
   int dwLock0 = 0;
   int dwLock1 = 0;
+  int generation = 0;
 }
 
 class XqwlSearch {
@@ -18,17 +19,31 @@ class XqwlSearch {
 
   late List<int> nHistoryTable; // [65536] 历史表
   late List<List<int>> mvKillers; //[LIMIT_DEPTH][2] 杀手走法表
-  late List<HashItem> hashTable; // [HASH_SIZE] 置换表
+  final List<HashItem> hashTable = List.generate(
+    XqwlPosition.HASH_SIZE,
+    (_) => HashItem(),
+  );
   final Map<String, Map<int, int>> _bookByHistory = {};
   int nBookSize = 0;
   int mvResult = 0; // 电脑走的棋
   final Stopwatch _searchClock = Stopwatch();
   int _maxThinkMs = 0;
+  bool _searchAborted = false;
+  int _generation = 0;
 
   final pos = XqwlPosition();
 
   bool get _timeLimitReached =>
       _maxThinkMs > 0 && _searchClock.elapsedMilliseconds >= _maxThinkMs;
+
+  bool _shouldStop() {
+    if (_searchAborted) return true;
+    if (_timeLimitReached) {
+      _searchAborted = true;
+      return true;
+    }
+    return false;
+  }
 
   // "qsort"按历史表排序的比较函数
   int _compareHistory(int lpmv1, int lpmv2) {
@@ -84,58 +99,58 @@ class XqwlSearch {
 
   String _bookKey(Iterable<int> moves) => moves.join(',');
 
-  int probeHash(int vlAlpha, int vlBeta, int nDepth, List<int> mv) {
-    bool bMate; // 杀棋标志：如果是杀棋，那么不需要满足深度条件
-    HashItem hsh;
-    hsh = hashTable[pos.zobr.dwKey & (XqwlPosition.HASH_SIZE - 1)];
-    if (hsh.dwLock0 != pos.zobr.dwLock0 || hsh.dwLock1 != pos.zobr.dwLock1) {
+  int? probeHash(int vlAlpha, int vlBeta, int nDepth, List<int> mv) {
+    final hsh = hashTable[pos.zobr.dwKey & (XqwlPosition.HASH_SIZE - 1)];
+    if (!hsh.valid ||
+        hsh.dwLock0 != pos.zobr.dwLock0 ||
+        hsh.dwLock1 != pos.zobr.dwLock1) {
       mv[0] = 0;
-      return -XqwlPosition.MATE_VALUE;
+      return null;
     }
     mv[0] = hsh.wmv;
-    bMate = false;
-    if (hsh.svl > XqwlPosition.WIN_VALUE) {
-      if (hsh.svl > XqwlPosition.BAN_VALUE) {
-        return -XqwlPosition.MATE_VALUE; // 可能导致搜索的不稳定性，立刻退出，但最佳着法可能拿到
-      }
-      hsh.svl -= pos.nDistance;
-      bMate = true;
-    } else if (hsh.svl < -XqwlPosition.WIN_VALUE) {
-      if (hsh.svl > -XqwlPosition.BAN_VALUE) {
-        return -XqwlPosition.MATE_VALUE;
-      }
-      hsh.svl += pos.nDistance;
-      bMate = true;
+    if (hsh.ucDepth < nDepth) return null;
+
+    var score = hsh.svl;
+    if (score > XqwlPosition.WIN_VALUE) {
+      score -= pos.nDistance;
+    } else if (score < -XqwlPosition.WIN_VALUE) {
+      score += pos.nDistance;
     }
-    if (hsh.ucDepth >= nDepth || bMate) {
-      if (hsh.ucFlag == XqwlPosition.HASH_BETA) {
-        return (hsh.svl >= vlBeta ? hsh.svl : -XqwlPosition.MATE_VALUE);
-      } else if (hsh.ucFlag == XqwlPosition.HASH_ALPHA) {
-        return (hsh.svl <= vlAlpha ? hsh.svl : -XqwlPosition.MATE_VALUE);
-      }
-      return hsh.svl;
-    }
-    return -XqwlPosition.MATE_VALUE;
+    return switch (hsh.ucFlag) {
+      XqwlPosition.HASH_BETA => score >= vlBeta ? score : null,
+      XqwlPosition.HASH_ALPHA => score <= vlAlpha ? score : null,
+      XqwlPosition.HASH_PV => score,
+      _ => null,
+    };
   }
 
   // 保存置换表项
   void recordHash(int nFlag, int vl, int nDepth, int mv) {
-    HashItem hsh;
-    hsh = hashTable[pos.zobr.dwKey & (XqwlPosition.HASH_SIZE - 1)];
-    if (hsh.ucDepth > nDepth) {
+    final index = pos.zobr.dwKey & (XqwlPosition.HASH_SIZE - 1);
+    final hsh = hashTable[index];
+    final samePosition =
+        hsh.valid &&
+        hsh.dwLock0 == pos.zobr.dwLock0 &&
+        hsh.dwLock1 == pos.zobr.dwLock1;
+    if (samePosition && hsh.ucDepth > nDepth) {
+      return;
+    }
+    if (samePosition &&
+        hsh.ucDepth == nDepth &&
+        hsh.ucFlag == XqwlPosition.HASH_PV &&
+        nFlag != XqwlPosition.HASH_PV) {
+      return;
+    }
+    if (hsh.valid &&
+        !samePosition &&
+        hsh.ucDepth > nDepth + (hsh.generation == _generation ? 2 : 4)) {
       return;
     }
     hsh.ucFlag = nFlag;
     hsh.ucDepth = nDepth;
     if (vl > XqwlPosition.WIN_VALUE) {
-      if (mv == 0 && vl <= XqwlPosition.BAN_VALUE) {
-        return; // 可能导致搜索的不稳定性，并且没有最佳着法，立刻退出
-      }
       hsh.svl = vl + pos.nDistance;
     } else if (vl < -XqwlPosition.WIN_VALUE) {
-      if (mv == 0 && vl >= -XqwlPosition.BAN_VALUE) {
-        return; // 同上
-      }
       hsh.svl = vl - pos.nDistance;
     } else {
       hsh.svl = vl;
@@ -143,7 +158,9 @@ class XqwlSearch {
     hsh.wmv = mv;
     hsh.dwLock0 = pos.zobr.dwLock0;
     hsh.dwLock1 = pos.zobr.dwLock1;
-    hashTable[pos.zobr.dwKey & (XqwlPosition.HASH_SIZE - 1)] = hsh;
+    hsh.generation = _generation;
+    hsh.valid = true;
+    hashTable[index] = hsh;
   }
 
   // MVV/LVA每种子力的价值
@@ -170,6 +187,7 @@ class XqwlSearch {
   // }
 
   void setBestMove(int mv, int nDepth) {
+    if (pos.ucpcSquares[XqwlPosition.getDst(mv)] != 0) return;
     List<int> lpmvKillers;
     nHistoryTable[mv] += nDepth * nDepth;
     lpmvKillers = mvKillers[pos.nDistance];
@@ -180,7 +198,7 @@ class XqwlSearch {
   }
 
   int searchQuiesc(int vlAlpha, int vlBeta) {
-    if (_timeLimitReached) return pos.evaluate();
+    if (_shouldStop()) return pos.evaluate();
     int i, nGenMoves;
     int vl, vlBest;
     List<int> mvs = [];
@@ -229,7 +247,7 @@ class XqwlSearch {
       if (pos.makeMove(mvs[i])) {
         vl = -searchQuiesc(-vlBeta, -vlAlpha);
         pos.undoMakeMove();
-        if (_timeLimitReached) break;
+        if (_shouldStop()) return pos.evaluate();
 
         // 8. 进行Alpha-Beta大小判断和截断
         if (vl > vlBest) {
@@ -255,7 +273,7 @@ class XqwlSearch {
 
   /// 超出边界(Fail-Soft)的Alpha-Beta搜索过程
   int searchFull(int vlAlpha, int vlBeta, int nDepth, [bool bNoNull = false]) {
-    if (_timeLimitReached) return pos.evaluate();
+    if (_shouldStop()) return pos.evaluate();
     int nHashFlag, vl, vlBest;
     int mv, mvBest, nNewDepth;
     List<int> mvHash = [0];
@@ -284,13 +302,21 @@ class XqwlSearch {
     }
 
     // 1-3. 尝试置换表裁剪，并得到置换表走法
-    vl = probeHash(vlAlpha, vlBeta, nDepth, mvHash);
-    if (vl > -XqwlPosition.MATE_VALUE) {
-      return vl;
+    final hashScore = probeHash(vlAlpha, vlBeta, nDepth, mvHash);
+    if (hashScore != null) {
+      return hashScore;
+    }
+
+    final nodeInCheck = pos.inCheck();
+    if (nDepth == 1 &&
+        !nodeInCheck &&
+        vlBeta == vlAlpha + 1 &&
+        pos.evaluate() + 120 <= vlAlpha) {
+      return searchQuiesc(vlAlpha, vlBeta);
     }
 
     // 1-4. 尝试空步裁剪(根节点的Beta值是"MATE_VALUE"，所以不可能发生空步裁剪)
-    if (!bNoNull && !pos.inCheck() && pos.nullOkey()) {
+    if (nDepth >= 3 && !bNoNull && !nodeInCheck && pos.nullOkey()) {
       pos.nullMove();
       vl = -searchFull(
         -vlBeta,
@@ -299,9 +325,20 @@ class XqwlSearch {
         NO_NULL,
       );
       pos.undoNullMove();
-      if (_timeLimitReached) return pos.evaluate();
+      if (_shouldStop()) return pos.evaluate();
       if (vl >= vlBeta) {
-        return vl;
+        if (nDepth >= 7) {
+          final verification = searchFull(
+            vlAlpha,
+            vlBeta,
+            nDepth - XqwlPosition.NULL_DEPTH,
+            NO_NULL,
+          );
+          if (_shouldStop()) return pos.evaluate();
+          if (verification >= vlBeta) return verification;
+        } else {
+          return vl;
+        }
       }
     }
 
@@ -314,21 +351,38 @@ class XqwlSearch {
     SortStruct sort = SortStruct.init(this, mvHash[0]);
 
     // 4. 逐一走这些走法，并进行递归
+    var searchedMoves = 0;
     while ((mv = sort.next()) != 0) {
+      if (_shouldStop()) return pos.evaluate();
+      final isCapture = pos.ucpcSquares[XqwlPosition.getDst(mv)] != 0;
       if (pos.makeMove(mv)) {
+        searchedMoves++;
         // 将军延伸
-        nNewDepth = pos.inCheck() ? nDepth : nDepth - 1;
+        final givesCheck = pos.inCheck();
+        nNewDepth = givesCheck ? nDepth : nDepth - 1;
         // PVS
         if (vlBest == -XqwlPosition.MATE_VALUE) {
           vl = -searchFull(-vlBeta, -vlAlpha, nNewDepth);
+        } else if (nDepth >= 3 &&
+            searchedMoves >= 4 &&
+            !nodeInCheck &&
+            !givesCheck &&
+            !isCapture) {
+          vl = -searchFull(-vlAlpha - 1, -vlAlpha, nNewDepth - 1);
+          if (!_shouldStop() && vl > vlAlpha) {
+            vl = -searchFull(-vlAlpha - 1, -vlAlpha, nNewDepth);
+            if (!_shouldStop() && vl > vlAlpha && vl < vlBeta) {
+              vl = -searchFull(-vlBeta, -vlAlpha, nNewDepth);
+            }
+          }
         } else {
           vl = -searchFull(-vlAlpha - 1, -vlAlpha, nNewDepth);
-          if (vl > vlAlpha && vl < vlBeta) {
+          if (!_shouldStop() && vl > vlAlpha && vl < vlBeta) {
             vl = -searchFull(-vlBeta, -vlAlpha, nNewDepth);
           }
         }
         pos.undoMakeMove();
-        if (_timeLimitReached) break;
+        if (_shouldStop()) return pos.evaluate();
 
         // 5. 进行Alpha-Beta大小判断和截断
         if (vl > vlBest) {
@@ -350,6 +404,8 @@ class XqwlSearch {
       }
     }
 
+    if (_searchAborted) return pos.evaluate();
+
     // 5. 所有走法都搜索完了，把最佳走法(不能是Alpha走法)保存到历史表，返回最佳值
     if (vlBest == -XqwlPosition.MATE_VALUE) {
       // 如果是杀棋，就根据杀棋步数给出评价
@@ -368,12 +424,11 @@ class XqwlSearch {
   // 根节点的Alpha-Beta搜索过程
   int searchRoot(int nDepth) {
     int vl, vlBest, mv, nNewDepth;
-    Random random = Random();
     vlBest = -XqwlPosition.MATE_VALUE;
     SortStruct sort = SortStruct.init(this, mvResult);
 
     while ((mv = sort.next()) != 0) {
-      if (_timeLimitReached) break;
+      if (_shouldStop()) return vlBest;
       if (pos.makeMove(mv)) {
         nNewDepth = pos.inCheck() ? nDepth : nDepth - 1;
         if (vlBest == -XqwlPosition.MATE_VALUE) {
@@ -395,21 +450,16 @@ class XqwlSearch {
           }
         }
         pos.undoMakeMove();
-        if (_timeLimitReached) break;
+        if (_shouldStop()) return vlBest;
         if (vl > vlBest) {
           vlBest = vl;
           mvResult = mv;
-          if (vlBest > -XqwlPosition.WIN_VALUE &&
-              vlBest < XqwlPosition.WIN_VALUE) {
-            vlBest +=
-                random.nextInt(XqwlPosition.RANDOM_MASK + 1) -
-                random.nextInt(XqwlPosition.RANDOM_MASK + 1);
-          }
         }
       }
     }
+    if (_searchAborted) return vlBest;
     recordHash(XqwlPosition.HASH_PV, vlBest, nDepth, mvResult);
-    setBestMove(mvResult, nDepth);
+    if (mvResult != 0) setBestMove(mvResult, nDepth);
     return vlBest;
   }
 
@@ -419,6 +469,9 @@ class XqwlSearch {
     int maxThinkMs = 5000,
   }) {
     _maxThinkMs = maxThinkMs;
+    _searchAborted = false;
+    _generation = (_generation + 1) & 0x7fffffff;
+    if (_generation == 0) _generation = 1;
     _searchClock
       ..reset()
       ..start();
@@ -432,7 +485,6 @@ class XqwlSearch {
 
     // 初始化
     nHistoryTable = List.filled(65536, 0); // 清空历史表
-    hashTable = List.generate(XqwlPosition.HASH_SIZE, (_) => HashItem());
     mvKillers = List.generate(
       XqwlPosition.LIMIT_DEPTH,
       (_) => List.filled(2, 0),
@@ -453,23 +505,39 @@ class XqwlSearch {
 
     // 检查是否只有唯一走法
     int vl = 0;
+    var fallbackMove = 0;
+    mvResult = 0;
     int nGenMoves = pos.generateMoves(mvs);
     for (int i = 0; i < nGenMoves; i++) {
       if (pos.makeMove(mvs[i])) {
         pos.undoMakeMove();
-        mvResult = mvs[i];
+        fallbackMove = mvs[i];
         vl++;
       }
     }
+    mvResult = fallbackMove;
+    if (_timeLimitReached) {
+      _searchAborted = true;
+      _searchClock.stop();
+      return;
+    }
     if (vl == 1) {
+      _searchClock.stop();
+      return;
+    }
+    if (vl == 0) {
       _searchClock.stop();
       return;
     }
 
     // 迭代加深过程
     for (int i = 1; i <= maxDepth && i <= XqwlPosition.LIMIT_DEPTH; i++) {
-      // int vl = searchFull(-XqwlPosition.MATE_VALUE, XqwlPosition.MATE_VALUE, i);
+      final fallbackMove = mvResult;
       vl = searchRoot(i);
+      if (_searchAborted) {
+        mvResult = fallbackMove;
+        break;
+      }
       // 搜索到杀棋，就终止搜索
       if (vl > XqwlPosition.WIN_VALUE || vl < -XqwlPosition.WIN_VALUE) {
         break;
@@ -486,8 +554,9 @@ class SortStruct {
   static const int PHASE_HASH = 0;
   static const int PHASE_KILLER_1 = 1;
   static const int PHASE_KILLER_2 = 2;
-  static const int PHASE_GEN_MOVES = 3;
-  static const int PHASE_REST = 4;
+  static const int PHASE_GEN_CAPTURES = 3;
+  static const int PHASE_GEN_QUIETS = 4;
+  static const int PHASE_DONE = 5;
 
   int mvHash = 0;
   int mvKiller1 = 0;
@@ -496,6 +565,8 @@ class SortStruct {
   int nIndex = 0;
   int nGenMoves = 0;
   List<int> mvs = [];
+  bool _capturesGenerated = false;
+  bool _quietsGenerated = false;
   final XqwlSearch s;
 
   SortStruct.init(this.s, int mvHash_) {
@@ -513,7 +584,7 @@ class SortStruct {
     // 0. 置换表着法启发，完成后立即进入下一阶段；
     if (PHASE_HASH >= nPhase) {
       nPhase = PHASE_KILLER_1;
-      if (mvHash != 0) {
+      if (mvHash != 0 && s.pos.legalMove(mvHash)) {
         return mvHash;
       }
     }
@@ -530,23 +601,20 @@ class SortStruct {
 
     // 2. 杀手着法启发(第二个杀手着法)，完成后立即进入下一阶段；
     if (PHASE_KILLER_2 >= nPhase) {
-      nPhase = PHASE_GEN_MOVES;
+      nPhase = PHASE_GEN_CAPTURES;
       if (mvKiller2 != mvHash && mvKiller2 != 0 && s.pos.legalMove(mvKiller2)) {
         return mvKiller2;
       }
     }
 
-    // 3. 生成所有着法，完成后立即进入下一阶段；
-    if (PHASE_GEN_MOVES >= nPhase) {
-      nPhase = PHASE_REST;
-      nGenMoves = s.pos.generateMoves(mvs);
-      // qsort(mvs, nGenMoves, sizeof(int), CompareHistory);
-      mvs.sort(s._compareHistory);
-      nIndex = 0;
-    }
-
-    // 4. 对剩余着法做历史表启发；
-    if (PHASE_REST >= nPhase) {
+    // 3. 吃子优先，按 MVV/LVA 排序。
+    if (nPhase == PHASE_GEN_CAPTURES) {
+      if (!_capturesGenerated) {
+        nGenMoves = s.pos.generateMoves(mvs, XqwlSearch.GEN_CAPTURE);
+        mvs.sort(s.compareMvvLva);
+        nIndex = 0;
+        _capturesGenerated = true;
+      }
       while (nIndex < nGenMoves) {
         mv = mvs[nIndex];
         nIndex++;
@@ -554,6 +622,28 @@ class SortStruct {
           return mv;
         }
       }
+      nPhase = PHASE_GEN_QUIETS;
+      nIndex = 0;
+    }
+
+    if (nPhase == PHASE_GEN_QUIETS) {
+      if (!_quietsGenerated) {
+        nGenMoves = s.pos.generateMoves(mvs);
+        mvs.removeWhere(
+          (move) => s.pos.ucpcSquares[XqwlPosition.getDst(move)] != 0,
+        );
+        mvs.sort(s._compareHistory);
+        nIndex = 0;
+        _quietsGenerated = true;
+      }
+      while (nIndex < nGenMoves) {
+        mv = mvs[nIndex];
+        nIndex++;
+        if (mv != mvHash && mv != mvKiller1 && mv != mvKiller2) {
+          return mv;
+        }
+      }
+      nPhase = PHASE_DONE;
     }
 
     // 5. 没有着法了，返回零。
