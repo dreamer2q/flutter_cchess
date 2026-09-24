@@ -372,7 +372,10 @@ class XqwlSearch {
   }
 
   // 迭代加深搜索过程
-  void searchMain() {
+  void searchMain({
+    int maxDepth = XqwlPosition.LIMIT_DEPTH,
+    int maxThinkMs = 5000,
+  }) {
     List<int> mvs = [];
 
     // 初始化
@@ -412,7 +415,7 @@ class XqwlSearch {
 
     // 迭代加深过程
     final t = DateTime.now(); // 初始化定时器
-    for (int i = 1; i <= XqwlPosition.LIMIT_DEPTH; i++) {
+    for (int i = 1; i <= maxDepth && i <= XqwlPosition.LIMIT_DEPTH; i++) {
       // int vl = searchFull(-XqwlPosition.MATE_VALUE, XqwlPosition.MATE_VALUE, i);
       vl = searchRoot(i);
       // 搜索到杀棋，就终止搜索
@@ -420,7 +423,7 @@ class XqwlSearch {
         break;
       }
       // 超过一秒，就终止搜索
-      if (DateTime.now().difference(t) > const Duration(seconds: 5)) {
+      if (DateTime.now().difference(t).inMilliseconds >= maxThinkMs) {
         break;
       }
     }

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
+
 /// The local play modes supported by the offline product.
 enum GamePlayMode { self, ai }
 
@@ -20,7 +22,8 @@ class GameMove {
     final to = json['to'];
     if (from is! int || to is! int) {
       throw const FormatException(
-          'A game move must contain integer from/to values.');
+        'A game move must contain integer from/to values.',
+      );
     }
     return GameMove(from: from, to: to);
   }
@@ -46,6 +49,8 @@ class GameRecord {
     this.result = GameResult.inProgress,
     this.redElapsedMs = 0,
     this.blackElapsedMs = 0,
+    this.timeControlSeconds = 900,
+    this.aiStrength = AiStrength.normal,
   }) : moves = List.unmodifiable(moves);
 
   final String id;
@@ -57,6 +62,8 @@ class GameRecord {
   final DateTime updatedAt;
   final int redElapsedMs;
   final int blackElapsedMs;
+  final int timeControlSeconds;
+  final AiStrength aiStrength;
 
   GameRecord copyWith({
     String? id,
@@ -68,6 +75,8 @@ class GameRecord {
     DateTime? updatedAt,
     int? redElapsedMs,
     int? blackElapsedMs,
+    int? timeControlSeconds,
+    AiStrength? aiStrength,
   }) {
     return GameRecord(
       id: id ?? this.id,
@@ -79,20 +88,24 @@ class GameRecord {
       updatedAt: updatedAt ?? this.updatedAt,
       redElapsedMs: redElapsedMs ?? this.redElapsedMs,
       blackElapsedMs: blackElapsedMs ?? this.blackElapsedMs,
+      timeControlSeconds: timeControlSeconds ?? this.timeControlSeconds,
+      aiStrength: aiStrength ?? this.aiStrength,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'initialFen': initialFen,
-        'moves': moves.map((move) => move.toJson()).toList(),
-        'mode': mode.name,
-        'result': result.name,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        'updatedAt': updatedAt.toUtc().toIso8601String(),
-        'redElapsedMs': redElapsedMs,
-        'blackElapsedMs': blackElapsedMs,
-      };
+    'id': id,
+    'initialFen': initialFen,
+    'moves': moves.map((move) => move.toJson()).toList(),
+    'mode': mode.name,
+    'result': result.name,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+    'redElapsedMs': redElapsedMs,
+    'blackElapsedMs': blackElapsedMs,
+    'timeControlSeconds': timeControlSeconds,
+    'aiStrength': aiStrength.name,
+  };
 
   String encode() => jsonEncode(toJson());
 
@@ -104,6 +117,8 @@ class GameRecord {
     final result = _enumFromName(GameResult.values, json['result']);
     final createdAtValue = json['createdAt'];
     final updatedAtValue = json['updatedAt'];
+    final timeControlSeconds = json['timeControlSeconds'] ?? 0;
+    final aiStrengthValue = json['aiStrength'];
 
     if (id is! String ||
         id.isEmpty ||
@@ -112,7 +127,10 @@ class GameRecord {
         mode == null ||
         result == null ||
         createdAtValue is! String ||
-        updatedAtValue is! String) {
+        updatedAtValue is! String ||
+        timeControlSeconds is! int ||
+        timeControlSeconds < 0 ||
+        (aiStrengthValue != null && aiStrengthValue is! String)) {
       throw const FormatException('Invalid game record.');
     }
     final createdAt = DateTime.tryParse(createdAtValue);
@@ -139,6 +157,8 @@ class GameRecord {
       updatedAt: updatedAt.toUtc(),
       redElapsedMs: _intValue(json['redElapsedMs']),
       blackElapsedMs: _intValue(json['blackElapsedMs']),
+      timeControlSeconds: timeControlSeconds,
+      aiStrength: AiStrength.fromName(aiStrengthValue as String?),
     );
   }
 

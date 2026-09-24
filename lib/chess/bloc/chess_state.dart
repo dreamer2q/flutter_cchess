@@ -78,8 +78,13 @@ class ChessState extends Equatable {
     this.winningSide,
     this.lastMove,
     this.failureMessage,
+    this.resultReason,
     this.persistenceStatus = PersistenceStatus.idle,
     this.boardFlipped = false,
+    this.timeControlSeconds = 900,
+    this.redElapsedMs = 0,
+    this.blackElapsedMs = 0,
+    this.aiStrength = AiStrength.normal,
   }) : selectedMoves = selectedMoves ?? BuiltList<MovePos>(),
        hintMoves = hintMoves ?? BuiltList<MovePos>(),
        presentations = presentations ?? BuiltList<PresentationEffect>();
@@ -96,8 +101,20 @@ class ChessState extends Equatable {
   final MovePos? lastMove;
   final BuiltList<PresentationEffect> presentations;
   final String? failureMessage;
+  final String? resultReason;
   final PersistenceStatus persistenceStatus;
   final bool boardFlipped;
+  final int timeControlSeconds;
+  final int redElapsedMs;
+  final int blackElapsedMs;
+  final AiStrength aiStrength;
+
+  int remainingSeconds(PlaySide side) {
+    if (timeControlSeconds == 0) return 0;
+    final elapsed = side == PlaySide.red ? redElapsedMs : blackElapsedMs;
+    return ((timeControlSeconds * 1000 - elapsed).clamp(0, 1 << 31) + 999) ~/
+        1000;
+  }
 
   PresentationEffect? get activePresentation =>
       presentations.isEmpty ? null : presentations.first;
@@ -119,6 +136,7 @@ class ChessState extends Equatable {
   bool get canPause =>
       phase != GamePhase.loading &&
       phase != GamePhase.paused &&
+      phase != GamePhase.failure &&
       phase != GamePhase.finished;
   bool get canResume => phase == GamePhase.paused;
   bool get canResign =>
@@ -142,8 +160,13 @@ class ChessState extends Equatable {
     MovePos? lastMove,
     BuiltList<PresentationEffect>? presentations,
     String? failureMessage,
+    String? resultReason,
     PersistenceStatus? persistenceStatus,
     bool? boardFlipped,
+    int? timeControlSeconds,
+    int? redElapsedMs,
+    int? blackElapsedMs,
+    AiStrength? aiStrength,
     bool clearSelected = false,
     bool clearHintMoves = false,
     bool clearLastMove = false,
@@ -169,8 +192,13 @@ class ChessState extends Equatable {
       failureMessage: clearFailure
           ? null
           : failureMessage ?? this.failureMessage,
+      resultReason: clearResult ? null : resultReason ?? this.resultReason,
       persistenceStatus: persistenceStatus ?? this.persistenceStatus,
       boardFlipped: boardFlipped ?? this.boardFlipped,
+      timeControlSeconds: timeControlSeconds ?? this.timeControlSeconds,
+      redElapsedMs: redElapsedMs ?? this.redElapsedMs,
+      blackElapsedMs: blackElapsedMs ?? this.blackElapsedMs,
+      aiStrength: aiStrength ?? this.aiStrength,
     );
   }
 
@@ -188,7 +216,12 @@ class ChessState extends Equatable {
     lastMove,
     presentations,
     failureMessage,
+    resultReason,
     persistenceStatus,
     boardFlipped,
+    timeControlSeconds,
+    redElapsedMs,
+    blackElapsedMs,
+    aiStrength,
   ];
 }

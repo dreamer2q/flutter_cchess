@@ -4,6 +4,8 @@ import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter_cchess/engine/xqlite/search.dart';
 
+import 'ai_strength.dart';
+
 class _Request<T> {
   static int incrementalId = 1;
 
@@ -43,6 +45,8 @@ class _PendingResponse<T> {
 }
 
 abstract class ChessEnginePort {
+  Future<void> setStrength(AiStrength strength);
+
   Future<void> restore(Iterable<int> moves);
 
   Future<int> makeMove(int mv);
@@ -62,14 +66,24 @@ class ChessEngine implements ChessEnginePort {
   static void _engineHandler(SendPort sendPort) {
     final XqwlSearch search = XqwlSearch();
     final ReceivePort recvPort = ReceivePort();
+    var strength = AiStrength.normal;
 
     dynamic methodHandler(String method, dynamic params) {
       switch (method) {
+        case 'board.setStrength':
+          strength = AiStrength.fromName(params as String?);
+          break;
         case 'board.requestMove':
-          search.searchMain();
+          search.searchMain(
+            maxDepth: strength.maxDepth,
+            maxThinkMs: strength.maxThinkMs,
+          );
           return search.mvResult;
         case 'board.requestAndMakeMove':
-          search.searchMain();
+          search.searchMain(
+            maxDepth: strength.maxDepth,
+            maxThinkMs: strength.maxThinkMs,
+          );
           search.pos.makeMove(search.mvResult);
           return search.mvResult;
         case 'board.makeMove':
@@ -80,7 +94,10 @@ class ChessEngine implements ChessEnginePort {
           if (!search.pos.makeMove(mv)) {
             throw Exception('king is checked');
           }
-          search.searchMain();
+          search.searchMain(
+            maxDepth: strength.maxDepth,
+            maxThinkMs: strength.maxThinkMs,
+          );
           search.pos.makeMove(search.mvResult);
           return search.mvResult;
         case 'board.reset':
@@ -183,6 +200,11 @@ class ChessEngine implements ChessEnginePort {
     pendingResponseMap[request.id] = pendingRes;
     sendPort.send(request);
     return await pendingRes.future;
+  }
+
+  @override
+  Future<void> setStrength(AiStrength strength) async {
+    await invokeMethod('board.setStrength', strength.name);
   }
 
   @override

@@ -7,6 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_cchess/audio/audio.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
+import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/chess/presentation/game_presentation_coordinator.dart';
 import 'package:flutter_cchess/chess/widget/animated_captured_piece.dart';
 import 'package:flutter_cchess/chess/widget/animated_invalid_move.dart';
@@ -28,10 +30,14 @@ class ChessPage extends StatefulWidget {
     super.key,
     this.playMode = PlayMode.withAI,
     this.initialRecord,
+    this.timeControlSeconds = 900,
+    this.aiStrength = AiStrength.normal,
   });
 
   final PlayMode playMode;
   final GameRecord? initialRecord;
+  final int timeControlSeconds;
+  final AiStrength aiStrength;
 
   @override
   State<ChessPage> createState() => _ChessPageState();
@@ -103,6 +109,13 @@ class _ChessPageState extends State<ChessPage> {
                     ChessEventInitialized(
                       initialBoard: bootstrap.initialBoard,
                       playMode: widget.playMode,
+                      timeControlSeconds:
+                          widget.initialRecord?.timeControlSeconds ??
+                          widget.timeControlSeconds,
+                      redElapsedMs: widget.initialRecord?.redElapsedMs ?? 0,
+                      blackElapsedMs: widget.initialRecord?.blackElapsedMs ?? 0,
+                      aiStrength:
+                          widget.initialRecord?.aiStrength ?? widget.aiStrength,
                     ),
                   ),
             ),
@@ -182,6 +195,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   ChessState? _previousState;
   var _inspectorTab = 0;
   var _resultShown = false;
+  var _pausedByLifecycle = false;
 
   @override
   void initState() {
@@ -214,10 +228,17 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     if (!mounted) return;
     if (state == AppLifecycleState.resumed) {
       _presentationCoordinator.resume();
-      context.read<ChessBloc>().add(const ChessEventResume());
+      if (_pausedByLifecycle) {
+        _pausedByLifecycle = false;
+        context.read<ChessBloc>().add(const ChessEventResume());
+      }
       return;
     }
-    context.read<ChessBloc>().add(const ChessEventPause());
+    final bloc = context.read<ChessBloc>();
+    if (bloc.state.canPause) {
+      _pausedByLifecycle = true;
+      bloc.add(const ChessEventPause());
+    }
     unawaited(_presentationCoordinator.suspend());
   }
 
@@ -308,7 +329,10 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
               const SizedBox(height: 12),
               Text(title, style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
-              Text('棋局已自动保存', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                state.resultReason ?? '棋局已自动保存',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -330,7 +354,11 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => ChessPage(playMode: state.playMode),
+                            builder: (_) => ChessPage(
+                              playMode: state.playMode,
+                              timeControlSeconds: state.timeControlSeconds,
+                              aiStrength: state.aiStrength,
+                            ),
                           ),
                         );
                       },
@@ -351,7 +379,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     final bloc = context.read<ChessBloc>();
     final state = bloc.state;
     if (state.board.lastMoves.isEmpty || state.phase == GamePhase.finished) {
-      await bloc.flushPersistence();
+      await bloc.persistSnapshot();
       if (!mounted) return;
       Navigator.maybePop(context);
       return;
@@ -374,7 +402,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
       ),
     );
     if (leave == true && mounted) {
-      await bloc.flushPersistence();
+      await bloc.persistSnapshot();
       if (mounted) Navigator.maybePop(context);
     }
   }
@@ -405,7 +433,13 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     if (!confirmed || !mounted) return;
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => ChessPage(playMode: state.playMode)),
+      MaterialPageRoute(
+        builder: (_) => ChessPage(
+          playMode: state.playMode,
+          timeControlSeconds: state.timeControlSeconds,
+          aiStrength: state.aiStrength,
+        ),
+      ),
     );
   }
 
@@ -922,7 +956,9 @@ class _PlayerPanel extends StatelessWidget {
     final theme = context.watch<ThemeBloc>().state.theme;
     final active =
         state.board.innerBoard.sdPlayer == side.index &&
-        state.phase != GamePhase.finished;
+        state.phase != GamePhase.finished &&
+        state.phase != GamePhase.paused &&
+        state.phase != GamePhase.failure;
     final isPlayer =
         state.playMode == PlayMode.withSelf || side == state.playSide;
     final thinking = state.phase == GamePhase.aiThinking && !isPlayer;
@@ -947,7 +983,7 @@ class _PlayerPanel extends StatelessWidget {
                 children: [
                   Text(
                     state.playMode == PlayMode.withAI && !isPlayer
-                        ? '电脑 · 普通'
+                        ? '电脑 · ${_aiStrengthLabel(state.aiStrength)}'
                         : side == PlaySide.red
                         ? '红方 · 我'
                         : '黑方 · 本地',
@@ -997,10 +1033,16 @@ class _PlayerPanel extends StatelessWidget {
               ),
             ),
             Text(
-              '不限时',
+              _clockLabel(state, side),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontFeatures: const [FontFeature.tabularFigures()],
-                color: _GameColors.muted,
+                color:
+                    state.timeControlSeconds > 0 &&
+                        state.remainingSeconds(side) <= 60
+                    ? const Color(0xFFB23B38)
+                    : active
+                    ? _GameColors.ink
+                    : _GameColors.muted,
               ),
             ),
           ],
@@ -1438,6 +1480,7 @@ class ChessBoard extends StatefulWidget {
 class _ChessBoardState extends State<ChessBoard> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'chess-board');
   PiecePos _keyboardPosition = PiecePos(SquareBoard.coordXYFix(4, 9));
+  bool _showKeyboardFocus = false;
 
   @override
   void dispose() {
@@ -1453,6 +1496,7 @@ class _ChessBoardState extends State<ChessBoard> {
     }
     if (event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.space) {
+      setState(() => _showKeyboardFocus = true);
       if (state.canInteractBoard) {
         context.read<ChessBloc>().add(ChessEventBoardTap(_keyboardPosition));
       }
@@ -1479,6 +1523,7 @@ class _ChessBoardState extends State<ChessBoard> {
             .clamp(0, 9);
     setState(() {
       _keyboardPosition = PiecePos(SquareBoard.coordXYFix(x, y));
+      _showKeyboardFocus = true;
     });
     return KeyEventResult.handled;
   }
@@ -1521,7 +1566,12 @@ class _ChessBoardState extends State<ChessBoard> {
                         ignoring: locked,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTapDown: (_) => _focusNode.requestFocus(),
+                          onTapDown: (_) {
+                            _focusNode.requestFocus();
+                            if (_showKeyboardFocus) {
+                              setState(() => _showKeyboardFocus = false);
+                            }
+                          },
                           onTapUp: (tap) {
                             final contentSize = Size(
                               theme.boardSize.width -
@@ -1639,22 +1689,20 @@ class _ChessBoardState extends State<ChessBoard> {
                                     child: theme.buildPieceMask(context),
                                   ),
                                 ),
-                              if (_focusNode.hasFocus)
+                              if (_showKeyboardFocus &&
+                                  _focusNode.hasFocus &&
+                                  state.canInteractBoard &&
+                                  state.selected?.sq != _keyboardPosition.sq)
                                 Align(
                                   alignment: theme.getAlignment(
                                     _viewPosition(_keyboardPosition, flipped),
                                   ),
                                   child: IgnorePointer(
-                                    child: Container(
-                                      width: theme.pieceSize * .82,
-                                      height: theme.pieceSize * .82,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: _GameColors.jade,
-                                          width: 3,
-                                        ),
+                                    child: BoardCornerMarker(
+                                      key: const ValueKey(
+                                        'board-keyboard-focus',
                                       ),
+                                      dimension: theme.pieceSize,
                                     ),
                                   ),
                                 ),
@@ -1735,6 +1783,20 @@ Duration _moveDuration(MovePos move) {
 
 String _modeTitle(PlayMode mode) {
   return mode == PlayMode.withSelf ? '本地双人' : '人机对局';
+}
+
+String _aiStrengthLabel(AiStrength strength) => switch (strength) {
+  AiStrength.easy => '入门',
+  AiStrength.normal => '普通',
+  AiStrength.hard => '较强',
+};
+
+String _clockLabel(ChessState state, PlaySide side) {
+  if (state.timeControlSeconds == 0) return '不限时';
+  final remaining = state.remainingSeconds(side);
+  final minutes = (remaining ~/ 60).toString().padLeft(2, '0');
+  final seconds = (remaining % 60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
 }
 
 String _playEffectLabel(PlayEffect effect) {

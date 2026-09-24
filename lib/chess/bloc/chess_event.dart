@@ -10,11 +10,26 @@ class ChessEventInitialized extends ChessEvent {
   const ChessEventInitialized({
     required this.initialBoard,
     this.playMode = PlayMode.withAI,
+    this.timeControlSeconds = 900,
+    this.redElapsedMs = 0,
+    this.blackElapsedMs = 0,
+    this.aiStrength = AiStrength.normal,
   });
   final Board initialBoard;
   final PlayMode playMode;
+  final int timeControlSeconds;
+  final int redElapsedMs;
+  final int blackElapsedMs;
+  final AiStrength aiStrength;
   @override
-  List<Object?> get props => [initialBoard, playMode];
+  List<Object?> get props => [
+    initialBoard,
+    playMode,
+    timeControlSeconds,
+    redElapsedMs,
+    blackElapsedMs,
+    aiStrength,
+  ];
 }
 
 class ChessEventBoardTap extends ChessEvent {
@@ -117,4 +132,8 @@ class _ChessEventPersistenceStarted extends ChessEvent {
   final int revision;
   @override
   List<Object?> get props => [revision];
+}
+
+class _ChessEventClockTick extends ChessEvent {
+  const _ChessEventClockTick();
 }

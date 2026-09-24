@@ -4,6 +4,7 @@ import 'package:bloc/bloc.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_cchess/chess/game/game.dart';
+import 'package:flutter_cchess/chess/game/game_clock.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/storage/storage.dart';
@@ -19,9 +20,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     this.repository,
     this.initialFen = initialFenString,
     ChessEnginePort? engine,
+    int Function()? clockNowMs,
     String? gameId,
     DateTime? createdAt,
   }) : _providedEngine = engine,
+       _clockNowMs = clockNowMs,
        gameId = gameId ?? DateTime.now().microsecondsSinceEpoch.toString(),
        createdAt = createdAt ?? DateTime.now(),
        super(ChessState(board: Board(BuiltList<BoardAction>()))) {
@@ -45,12 +48,15 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     on<_ChessEventHintResolved>(_onHintResolved);
     on<_ChessEventPersistenceCompleted>(_onPersistenceCompleted);
     on<_ChessEventPersistenceStarted>(_onPersistenceStarted);
+    on<_ChessEventClockTick>(_onClockTick);
   }
 
   final Ticker ticker;
   final GameRepository? repository;
   final String initialFen;
   final ChessEnginePort? _providedEngine;
+  final int Function()? _clockNowMs;
+  final Stopwatch _monotonic = Stopwatch()..start();
   final String gameId;
   final DateTime createdAt;
 
@@ -59,16 +65,37 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   int _effectSequence = 0;
   int _persistenceRevision = 0;
   Future<void> _saveTail = Future<void>.value();
+  GameClock? _clock;
+  StreamSubscription<int>? _clockTicks;
+  int _lastClockPersistBucket = 0;
+
+  int get _nowMs => _clockNowMs?.call() ?? _monotonic.elapsedMilliseconds;
+
+  GameClockSnapshot get _clockSnapshot =>
+      _clock?.snapshot ??
+      GameClockSnapshot(
+        redElapsedMs: state.redElapsedMs,
+        blackElapsedMs: state.blackElapsedMs,
+      );
 
   Future<void> _onInitialized(
     ChessEventInitialized event,
     Emitter<ChessState> emit,
   ) async {
     _taskGeneration++;
+    emit(
+      state.copyWith(
+        timeControlSeconds: event.timeControlSeconds,
+        redElapsedMs: event.redElapsedMs,
+        blackElapsedMs: event.blackElapsedMs,
+        aiStrength: event.aiStrength,
+      ),
+    );
     try {
       switch (event.playMode) {
         case PlayMode.withAI:
           _engine = _providedEngine ?? ChessEngine();
+          await _engine!.setStrength(event.aiStrength);
           await _engine!.restore(event.initialBoard.lastMoves.map((m) => m.mv));
           break;
         case PlayMode.withSelf:
@@ -81,6 +108,14 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       final aiTurn =
           event.playMode == PlayMode.withAI &&
           !event.initialBoard.isTurn(PlaySide.red);
+      _clock = GameClock(
+        timeControlSeconds: event.timeControlSeconds,
+        redElapsedMs: event.redElapsedMs,
+        blackElapsedMs: event.blackElapsedMs,
+        nowMs: () => _nowMs,
+      );
+      _lastClockPersistBucket =
+          (event.redElapsedMs + event.blackElapsedMs) ~/ 10000;
       emit(
         state.copyWith(
           board: event.initialBoard,
@@ -95,8 +130,22 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           clearHintMoves: true,
           clearResult: true,
           clearFailure: true,
+          timeControlSeconds: event.timeControlSeconds,
+          redElapsedMs: event.redElapsedMs,
+          blackElapsedMs: event.blackElapsedMs,
+          aiStrength: event.aiStrength,
         ),
       );
+      if (_clock!.isExpired(event.initialBoard.innerBoard.sdPlayer)) {
+        _finishOnTime(event.initialBoard.innerBoard.sdPlayer, emit);
+        return;
+      }
+      _clock!.start(event.initialBoard.innerBoard.sdPlayer);
+      if (event.timeControlSeconds > 0) {
+        _clockTicks ??= ticker
+            .tick(ticks: 86400)
+            .listen((_) => add(const _ChessEventClockTick()));
+      }
       _queuePersist(event.initialBoard);
       if (aiTurn) _requestAiMove(fromRestoredPosition: true);
     } catch (error, stackTrace) {
@@ -159,6 +208,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     bool keepPaused = false,
   }) {
     final before = state.board;
+    final movingSide = before.innerBoard.sdPlayer;
+    if (_clock?.isExpired(movingSide) ?? false) {
+      _finishOnTime(movingSide, emit);
+      return;
+    }
     final movingPiece = before.getPiece(move.sqSrc);
     final capturedPiece = before.getPiece(move.sqDst);
     if (movingPiece == null || !before.isMovable(move)) {
@@ -196,6 +250,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         : requestAi
         ? GamePhase.aiThinking
         : GamePhase.playerTurn;
+    _clock?.stop();
+    final clock = _clockSnapshot;
+    if (!finished && !keepPaused) {
+      _clock?.start(after.innerBoard.sdPlayer);
+    }
     emit(
       state.copyWith(
         board: after,
@@ -204,9 +263,12 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         lastMove: move,
         playStatus: outcome.status,
         winningSide: outcome.winner,
+        resultReason: finished ? '将死' : null,
         clearSelected: true,
         clearHintMoves: true,
         clearFailure: true,
+        redElapsedMs: clock.redElapsedMs,
+        blackElapsedMs: clock.blackElapsedMs,
       ),
     );
     _queuePersist(after);
@@ -270,6 +332,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   Future<void> _onUndo(ChessEventUndo event, Emitter<ChessState> emit) async {
     if (!state.canUndo) return;
     _taskGeneration++;
+    _clock?.stop();
+    final clock = _clockSnapshot;
     final original = state.board;
     var cursor = original;
     final effects = <PresentationEffect>[];
@@ -293,10 +357,18 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       );
       cursor = after;
     }
-    emit(state.copyWith(phase: GamePhase.loading, clearSelected: true));
+    emit(
+      state.copyWith(
+        phase: GamePhase.loading,
+        clearSelected: true,
+        redElapsedMs: clock.redElapsedMs,
+        blackElapsedMs: clock.blackElapsedMs,
+      ),
+    );
     try {
       await _engine?.restore(cursor.lastMoves.map((m) => m.mv));
       if (emit.isDone) return;
+      _clock?.start(cursor.innerBoard.sdPlayer);
       emit(
         state.copyWith(
           board: cursor,
@@ -313,6 +385,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       _queuePersist(cursor);
     } catch (error, stackTrace) {
       addError(error, stackTrace);
+      _clock?.start(original.innerBoard.sdPlayer);
       emit(
         state.copyWith(
           board: original,
@@ -388,10 +461,14 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       return;
     }
     if (event.error != null || event.move == null) {
+      _clock?.stop();
+      final clock = _clockSnapshot;
       emit(
         state.copyWith(
           phase: GamePhase.failure,
           failureMessage: '电脑思考失败，可以重试或切换本地双人。',
+          redElapsedMs: clock.redElapsedMs,
+          blackElapsedMs: clock.blackElapsedMs,
         ),
       );
       return;
@@ -406,7 +483,17 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   void _onPaused(ChessEventPause event, Emitter<ChessState> emit) {
     if (!state.canPause) return;
-    emit(state.copyWith(phase: GamePhase.paused, clearSelected: true));
+    _clock?.stop();
+    final clock = _clockSnapshot;
+    emit(
+      state.copyWith(
+        phase: GamePhase.paused,
+        clearSelected: true,
+        redElapsedMs: clock.redElapsedMs,
+        blackElapsedMs: clock.blackElapsedMs,
+      ),
+    );
+    _queuePersist(state.board);
   }
 
   void _onResumed(ChessEventResume event, Emitter<ChessState> emit) {
@@ -418,12 +505,17 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
               !state.board.isTurn(state.playSide)
         ? GamePhase.aiThinking
         : GamePhase.playerTurn;
+    if (target != GamePhase.finished) {
+      _clock?.start(state.board.innerBoard.sdPlayer);
+    }
     emit(state.copyWith(phase: target));
   }
 
   void _onResigned(ChessEventResign event, Emitter<ChessState> emit) {
     if (!state.canResign || state.board.pcPairs.isEmpty) return;
     _taskGeneration++;
+    _clock?.stop();
+    final clock = _clockSnapshot;
     final resigningSide = state.playMode == PlayMode.withSelf
         ? (state.board.innerBoard.sdPlayer == PlaySide.red.index
               ? PlaySide.red
@@ -435,10 +527,13 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
             ? PlaySide.black
             : PlaySide.red,
         playStatus: PlayStatus.lose,
+        resultReason: '${resigningSide == PlaySide.red ? '红方' : '黑方'}认输',
         phase: GamePhase.finished,
         clearSelected: true,
         clearHintMoves: true,
         clearFailure: true,
+        redElapsedMs: clock.redElapsedMs,
+        blackElapsedMs: clock.blackElapsedMs,
       ),
     );
     _queuePersist(state.board);
@@ -456,6 +551,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     try {
       await engine.restore(state.board.lastMoves.map((move) => move.mv));
       if (emit.isDone || generation != _taskGeneration) return;
+      _clock?.start(state.board.innerBoard.sdPlayer);
       _requestAiMove(fromRestoredPosition: true);
     } catch (error, stackTrace) {
       addError(error, stackTrace);
@@ -475,6 +571,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   ) async {
     if (state.phase != GamePhase.failure) return;
     _taskGeneration++;
+    _clock?.start(state.board.innerBoard.sdPlayer);
     emit(
       state.copyWith(
         playMode: PlayMode.withSelf,
@@ -517,6 +614,52 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     if (event.revision == _persistenceRevision) {
       emit(state.copyWith(persistenceStatus: PersistenceStatus.saving));
     }
+  }
+
+  void _onClockTick(_ChessEventClockTick event, Emitter<ChessState> emit) {
+    final clock = _clock;
+    if (clock == null || clock.activeSide == null) return;
+    final side = clock.activeSide!;
+    if (clock.isExpired(side)) {
+      _finishOnTime(side, emit);
+      return;
+    }
+    final snapshot = clock.snapshot;
+    emit(
+      state.copyWith(
+        redElapsedMs: snapshot.redElapsedMs,
+        blackElapsedMs: snapshot.blackElapsedMs,
+      ),
+    );
+    final bucket = (snapshot.redElapsedMs + snapshot.blackElapsedMs) ~/ 10000;
+    if (bucket != _lastClockPersistBucket) {
+      _lastClockPersistBucket = bucket;
+      _queuePersist(state.board);
+    }
+  }
+
+  void _finishOnTime(int losingSide, Emitter<ChessState> emit) {
+    _taskGeneration++;
+    _clock?.stop();
+    final clock = _clockSnapshot;
+    final winner = losingSide == PlaySide.red.index
+        ? PlaySide.black
+        : PlaySide.red;
+    emit(
+      state.copyWith(
+        phase: GamePhase.finished,
+        winningSide: winner,
+        playStatus: state.playMode == PlayMode.withAI
+            ? (winner == state.playSide ? PlayStatus.win : PlayStatus.lose)
+            : null,
+        resultReason: '${losingSide == PlaySide.red.index ? '红方' : '黑方'}超时',
+        redElapsedMs: clock.redElapsedMs,
+        blackElapsedMs: clock.blackElapsedMs,
+        clearSelected: true,
+        clearHintMoves: true,
+      ),
+    );
+    _queuePersist(state.board);
   }
 
   _MoveOutcome _outcomeFor(Board board, ChessPiece? capturedPiece) {
@@ -565,6 +708,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   }
 
   GameRecord _recordFor(Board board) {
+    final clock = _clockSnapshot;
     final result = state.winningSide == PlaySide.red
         ? GameResult.redWin
         : state.winningSide == PlaySide.black
@@ -584,15 +728,29 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       result: result,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
+      redElapsedMs: clock.redElapsedMs,
+      blackElapsedMs: clock.blackElapsedMs,
+      timeControlSeconds: state.timeControlSeconds,
+      aiStrength: state.aiStrength,
     );
   }
 
   Future<void> flushPersistence() => _saveTail;
 
+  Future<void> persistSnapshot() {
+    _queuePersist(state.board);
+    return flushPersistence();
+  }
+
   @override
   Future<void> close() async {
     _taskGeneration++;
+    await _clockTicks?.cancel();
+    _clock?.stop();
     await flushPersistence();
+    if (repository != null && state.board.pcPairs.isNotEmpty) {
+      await repository!.save(_recordFor(state.board));
+    }
     await _engine?.dispose();
     return super.close();
   }

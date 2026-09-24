@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_cchess/models/piece.dart';
+import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/theme/models/board_skin.dart';
 import 'package:flutter_cchess/theme/themes/board_theme.dart';
 
@@ -49,25 +50,9 @@ class AssetBoardTheme extends BoardTheme {
 
   @override
   Widget buildSelectedPiece(BuildContext context, ChessPiece piece) {
-    return SizedBox.square(
+    return BoardCornerMarker(
       dimension: pieceSize,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          buildPiece(context, piece),
-          IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF168A65), width: 3),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x55168A65), blurRadius: 8),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: buildPiece(context, piece),
     );
   }
 
