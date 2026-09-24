@@ -126,6 +126,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'desktop settings use a split view and apply themes immediately',
+    (tester) async {
+      await setViewport(tester, const Size(1200, 800));
+      await openLocalGame(tester);
+
+      await tester.tap(find.byTooltip('设置'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GameSettingsPage), findsOneWidget);
+      expect(find.text('偏好设置'), findsOneWidget);
+      expect(find.text('棋盘外观'), findsOneWidget);
+      await tester.tap(find.text('夜间胡桃木'));
+      await tester.pumpAndSettle();
+      expect(
+        find.image(const AssetImage('assets/skins/night/board.png')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('声音与触觉'));
+      await tester.pumpAndSettle();
+      expect(find.text('对局反馈'), findsOneWidget);
+      expect(find.text('触觉反馈'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('new game uses selected time and AI strength', (tester) async {
     await setViewport(tester, const Size(1200, 800));
     SharedPreferences.setMockInitialValues({

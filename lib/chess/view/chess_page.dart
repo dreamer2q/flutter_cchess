@@ -629,8 +629,8 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('主题与声音'),
+                leading: const Icon(Icons.settings_outlined),
+                title: const Text('设置'),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _showSettings();
@@ -680,100 +680,12 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   }
 
   Future<void> _showSettings() async {
-    final themeBloc = context.read<ThemeBloc>();
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          Future<void> update(GameSettings next) async {
-            setSheetState(() => _settings = next);
-            await _saveSettings(next);
-          }
-
-          return SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('主题与反馈', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 20),
-                  Text('棋盘主题', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 10),
-                  SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: 'assets/skins/night/config.json',
-                        label: Text('夜间胡桃木'),
-                      ),
-                      ButtonSegment(
-                        value: 'assets/skins/woods/config.json',
-                        label: Text('经典'),
-                      ),
-                    ],
-                    selected: {_settings.themeConfigAsset},
-                    onSelectionChanged: (selection) {
-                      final asset = selection.first;
-                      themeBloc.add(ThemeAssetRequested(asset));
-                      update(_settings.copyWith(themeConfigAsset: asset));
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('对局音效'),
-                    subtitle: const Text('走子、吃子、将军与结果反馈'),
-                    value: _settings.soundEnabled,
-                    onChanged: (value) =>
-                        update(_settings.copyWith(soundEnabled: value)),
-                  ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('背景音乐'),
-                    subtitle: const Text('音乐素材准备中'),
-                    value: false,
-                    onChanged: null,
-                  ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('触觉反馈'),
-                    subtitle: const Text('移动端落子与非法操作反馈'),
-                    value: _settings.hapticsEnabled,
-                    onChanged: (value) =>
-                        update(_settings.copyWith(hapticsEnabled: value)),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('动态效果', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 10),
-                  SegmentedButton<MotionPreference>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: MotionPreference.system,
-                        label: Text('跟随系统'),
-                      ),
-                      ButtonSegment(
-                        value: MotionPreference.full,
-                        label: Text('完整'),
-                      ),
-                      ButtonSegment(
-                        value: MotionPreference.reduced,
-                        label: Text('精简'),
-                      ),
-                    ],
-                    selected: {_settings.motionPreference},
-                    onSelectionChanged: (selection) => update(
-                      _settings.copyWith(motionPreference: selection.first),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => GameSettingsPage(
+          initialSettings: _settings,
+          onSettingsChanged: _saveSettings,
+        ),
       ),
     );
   }
@@ -945,9 +857,9 @@ class _GameTopBar extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: '主题与声音',
+              tooltip: '设置',
               onPressed: onSettings,
-              icon: const Icon(Icons.volume_up_outlined),
+              icon: const Icon(Icons.settings_outlined),
             ),
             IconButton(
               tooltip: '更多',
