@@ -1244,6 +1244,10 @@ class _GameCommandBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bloc = context.read<ChessBloc>();
+    final hintPending =
+        state.playMode == PlayMode.withAI &&
+        state.phase == GamePhase.aiThinking &&
+        state.board.isTurn(state.playSide);
     final commands = <_GameCommand>[
       _GameCommand(
         label: '悔棋',
@@ -1254,9 +1258,11 @@ class _GameCommandBar extends StatelessWidget {
       ),
       if (state.playMode == PlayMode.withAI)
         _GameCommand(
-          label: '提示',
-          icon: Icons.lightbulb_outline,
-          active: state.hintMoves.isNotEmpty,
+          label: hintPending ? '计算中' : '提示',
+          icon: hintPending
+              ? Icons.hourglass_top_rounded
+              : Icons.lightbulb_outline,
+          active: hintPending || state.hintMoves.isNotEmpty,
           onPressed: state.canHint
               ? () => bloc.add(const ChessEventGetHint())
               : null,
@@ -1311,10 +1317,10 @@ class _CommandButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = command.onPressed == null
-        ? _GameColors.inactive
-        : command.active
+    final color = command.active
         ? _GameColors.jade
+        : command.onPressed == null
+        ? _GameColors.inactive
         : _GameColors.ink;
     return Tooltip(
       message: command.label,
@@ -1651,26 +1657,6 @@ class _ChessBoardState extends State<ChessBoard> {
                                   child: theme.buildMovePrint(context, false),
                                 ),
                               ],
-                              if (state.hintMoves.isNotEmpty) ...[
-                                Align(
-                                  alignment: theme.getAlignment(
-                                    _viewPosition(
-                                      state.hintMoves.first.srcPos,
-                                      flipped,
-                                    ),
-                                  ),
-                                  child: theme.buildMovePrint(context, true),
-                                ),
-                                Align(
-                                  alignment: theme.getAlignment(
-                                    _viewPosition(
-                                      state.hintMoves.first.dstPos,
-                                      flipped,
-                                    ),
-                                  ),
-                                  child: theme.buildPieceMask(context),
-                                ),
-                              ],
                               if (animating &&
                                   effect!.kind !=
                                       PresentationEffectKind.invalidMove)
@@ -1711,6 +1697,32 @@ class _ChessBoardState extends State<ChessBoard> {
                                     child: theme.buildPieceMask(context),
                                   ),
                                 ),
+                              if (state.hintMoves.isNotEmpty) ...[
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(
+                                      state.hintMoves.first.srcPos,
+                                      flipped,
+                                    ),
+                                  ),
+                                  child: _HintBoardMarker(
+                                    dimension: theme.pieceSize,
+                                    destination: false,
+                                  ),
+                                ),
+                                Align(
+                                  alignment: theme.getAlignment(
+                                    _viewPosition(
+                                      state.hintMoves.first.dstPos,
+                                      flipped,
+                                    ),
+                                  ),
+                                  child: _HintBoardMarker(
+                                    dimension: theme.pieceSize,
+                                    destination: true,
+                                  ),
+                                ),
+                              ],
                               if (_showKeyboardFocus &&
                                   _focusNode.hasFocus &&
                                   state.canInteractBoard &&
@@ -1888,4 +1900,48 @@ class _GameColors {
   static const muted = Color(0xFF68716E);
   static const inactive = Color(0xFF9EA5A2);
   static const jade = Color(0xFF2D9B73);
+  static const hint = Color(0xFFD29A43);
+}
+
+class _HintBoardMarker extends StatelessWidget {
+  const _HintBoardMarker({required this.dimension, required this.destination});
+
+  final double dimension;
+  final bool destination;
+
+  @override
+  Widget build(BuildContext context) {
+    final markerSize = dimension * (destination ? .62 : .94);
+    return IgnorePointer(
+      child: SizedBox.square(
+        dimension: dimension,
+        child: Center(
+          child: Container(
+            width: markerSize,
+            height: markerSize,
+            decoration: BoxDecoration(
+              color: _GameColors.hint.withValues(alpha: destination ? .17 : .1),
+              shape: BoxShape.circle,
+              border: Border.all(color: _GameColors.hint, width: 2.5),
+              boxShadow: const [
+                BoxShadow(color: Color(0x332E2110), blurRadius: 5),
+              ],
+            ),
+            child: destination
+                ? Center(
+                    child: Container(
+                      width: dimension * .14,
+                      height: dimension * .14,
+                      decoration: const BoxDecoration(
+                        color: _GameColors.hint,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
 }
