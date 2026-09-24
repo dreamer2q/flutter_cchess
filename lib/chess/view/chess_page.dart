@@ -18,6 +18,7 @@ import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
+import 'package:flutter_cchess/theme/themes/board_theme.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
 
@@ -484,6 +485,9 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
         listener: _handleState,
         child: BlocBuilder<ChessBloc, ChessState>(
           builder: (context, state) {
+            final boardTheme = context.select(
+              (ThemeBloc bloc) => bloc.state.theme,
+            );
             return PopScope(
               canPop: _allowPagePop,
               onPopInvokedWithResult: (didPop, result) {
@@ -500,11 +504,10 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                     return Stack(
                       children: [
                         Positioned.fill(
-                          child: desktop
-                              ? const _DesktopBackdrop()
-                              : const ColoredBox(
-                                  color: _GameColors.mobileCanvas,
-                                ),
+                          child: _GameBackdrop(
+                            theme: boardTheme,
+                            desktop: desktop,
+                          ),
                         ),
                         SafeArea(
                           child: desktop
@@ -1480,12 +1483,26 @@ class _GlassSurface extends StatelessWidget {
   }
 }
 
-class _DesktopBackdrop extends StatelessWidget {
-  const _DesktopBackdrop();
+class _GameBackdrop extends StatelessWidget {
+  const _GameBackdrop({required this.theme, required this.desktop});
+
+  final BoardTheme theme;
+  final bool desktop;
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(color: _GameColors.mobileCanvas);
+    final asset = desktop
+        ? theme.desktopBackgroundAsset
+        : theme.mobileBackgroundAsset;
+    if (asset == null) {
+      return const ColoredBox(color: _GameColors.mobileCanvas);
+    }
+    return Image.asset(
+      asset,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+    );
   }
 }
 
@@ -1864,7 +1881,7 @@ String _moveLabel(MovePos move) {
 class _GameColors {
   const _GameColors._();
 
-  static const mobileCanvas = Color(0xFFF0F2F1);
+  static const mobileCanvas = Color(0xFFECE9E1);
   static const surface = Color(0xFFFFFFFF);
   static const border = Color(0x33717F7B);
   static const ink = Color(0xFF202625);

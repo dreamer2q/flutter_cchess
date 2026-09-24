@@ -23,6 +23,12 @@ class AssetBoardTheme extends BoardTheme {
   String get boardAsset => skin.boardAsset;
 
   @override
+  String? get mobileBackgroundAsset => skin.mobileBackground;
+
+  @override
+  String? get desktopBackgroundAsset => skin.desktopBackground;
+
+  @override
   double get pieceSize => skin.pieceSize;
 
   @override
@@ -30,11 +36,13 @@ class AssetBoardTheme extends BoardTheme {
 
   @override
   Widget buildBoard(BuildContext context) {
-    return Image.asset(
-      boardAsset,
-      width: boardSize.width,
-      height: boardSize.height,
-      fit: BoxFit.fill,
+    return buildBoardSurface(
+      Image.asset(
+        boardAsset,
+        width: boardSize.width,
+        height: boardSize.height,
+        fit: BoxFit.fill,
+      ),
     );
   }
 

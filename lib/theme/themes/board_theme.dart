@@ -11,11 +11,30 @@ abstract class BoardTheme extends Equatable {
 
   String get boardAsset;
 
+  String? get mobileBackgroundAsset => null;
+
+  String? get desktopBackgroundAsset => null;
+
   double get pieceSize;
 
   String get pieceAssets;
 
   Widget buildBoard(BuildContext context);
+
+  Widget buildBoardSurface(Widget child) => DecoratedBox(
+    decoration: const BoxDecoration(
+      boxShadow: [
+        BoxShadow(
+          color: Color(0x260F1714),
+          offset: Offset(0, 12),
+          blurRadius: 26,
+          spreadRadius: 2,
+        ),
+        BoxShadow(color: Color(0x18A07845), blurRadius: 34, spreadRadius: 2),
+      ],
+    ),
+    child: child,
+  );
 
   Widget buildPiece(BuildContext context, ChessPiece piece);
 
@@ -31,5 +50,12 @@ abstract class BoardTheme extends Equatable {
   PiecePos? hitTest(Offset localPosition);
 
   @override
-  List<Object?> get props => [boardSize, boardPadding, pieceSize, pieceAssets];
+  List<Object?> get props => [
+    boardSize,
+    boardPadding,
+    pieceSize,
+    pieceAssets,
+    mobileBackgroundAsset,
+    desktopBackgroundAsset,
+  ];
 }

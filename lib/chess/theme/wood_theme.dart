@@ -27,11 +27,13 @@ class WoodsBoardTheme extends BoardTheme {
 
   @override
   Widget buildBoard(BuildContext context) {
-    return Image.asset(
-      boardAsset,
-      width: boardSize.width,
-      height: boardSize.height,
-      fit: BoxFit.fill,
+    return buildBoardSurface(
+      Image.asset(
+        boardAsset,
+        width: boardSize.width,
+        height: boardSize.height,
+        fit: BoxFit.fill,
+      ),
     );
   }
 
