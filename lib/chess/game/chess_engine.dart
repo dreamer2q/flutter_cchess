@@ -45,6 +45,8 @@ class _PendingResponse<T> {
 }
 
 abstract class ChessEnginePort {
+  Future<void> setOpeningBook(Iterable<List<int>> lines);
+
   Future<void> setStrength(
     AiStrength strength, {
     int? maxDepth,
@@ -81,6 +83,12 @@ class ChessEngine implements ChessEnginePort {
           strength = AiStrength.fromName(settings['strength'] as String?);
           maxDepth = settings['maxDepth'] as int? ?? strength.maxDepth;
           maxThinkMs = settings['maxThinkMs'] as int? ?? strength.maxThinkMs;
+          break;
+        case 'board.setOpeningBook':
+          final lines = (params as Iterable).map(
+            (line) => List<int>.from(line as Iterable),
+          );
+          search.loadBook(lines);
           break;
         case 'board.requestMove':
           search.searchMain(maxDepth: maxDepth, maxThinkMs: maxThinkMs);
@@ -200,6 +208,14 @@ class ChessEngine implements ChessEnginePort {
     pendingResponseMap[request.id] = pendingRes;
     sendPort.send(request);
     return await pendingRes.future;
+  }
+
+  @override
+  Future<void> setOpeningBook(Iterable<List<int>> lines) async {
+    await invokeMethod(
+      'board.setOpeningBook',
+      lines.map((line) => List<int>.from(line)).toList(growable: false),
+    );
   }
 
   @override

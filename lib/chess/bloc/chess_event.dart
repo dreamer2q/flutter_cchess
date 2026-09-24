@@ -16,6 +16,7 @@ class ChessEventInitialized extends ChessEvent {
     this.aiStrength = AiStrength.normal,
     this.aiMaxDepth,
     this.aiMaxThinkMs,
+    this.openingBookLines = const [],
   });
   final Board initialBoard;
   final PlayMode playMode;
@@ -25,6 +26,7 @@ class ChessEventInitialized extends ChessEvent {
   final AiStrength aiStrength;
   final int? aiMaxDepth;
   final int? aiMaxThinkMs;
+  final List<List<int>> openingBookLines;
   int get resolvedAiMaxDepth => aiMaxDepth ?? aiStrength.maxDepth;
   int get resolvedAiMaxThinkMs => aiMaxThinkMs ?? aiStrength.maxThinkMs;
   @override
@@ -37,6 +39,7 @@ class ChessEventInitialized extends ChessEvent {
     aiStrength,
     aiMaxDepth,
     aiMaxThinkMs,
+    openingBookLines,
   ];
 }
 

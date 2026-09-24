@@ -98,6 +98,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       switch (event.playMode) {
         case PlayMode.withAI:
           _engine = _providedEngine ?? ChessEngine();
+          await _engine!.setOpeningBook(event.openingBookLines);
           await _engine!.setStrength(
             event.aiStrength,
             maxDepth: event.resolvedAiMaxDepth,

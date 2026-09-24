@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_cchess/audio/audio.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
+import 'package:flutter_cchess/chess/game/opening_book.dart';
 import 'package:flutter_cchess/chess/notation/chinese_notation.dart';
 import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/chess/presentation/game_presentation_coordinator.dart';
@@ -57,6 +58,9 @@ class _ChessPageState extends State<ChessPage> {
     final settingsRepository = SharedPreferencesGameSettingsRepository(
       preferences,
     );
+    final openingBookLines = OpeningBook.fromRecords(
+      await gameRepository.list(),
+    );
     final record = widget.initialRecord;
     final initialFen = record?.initialFen ?? initialFenString;
     var initialBoard = FenUtil.parse(initialFen);
@@ -79,6 +83,7 @@ class _ChessPageState extends State<ChessPage> {
       settings: await settingsRepository.load(),
       initialBoard: initialBoard,
       initialFen: initialFen,
+      openingBookLines: openingBookLines,
     );
   }
 
@@ -133,6 +138,7 @@ class _ChessPageState extends State<ChessPage> {
                           (widget.aiStrength == bootstrap.settings.aiStrength
                               ? bootstrap.settings.aiMaxThinkMs
                               : widget.aiStrength.maxThinkMs),
+                      openingBookLines: bootstrap.openingBookLines,
                     ),
                   ),
             ),
@@ -155,6 +161,7 @@ class _GameBootstrap {
     required this.settings,
     required this.initialBoard,
     required this.initialFen,
+    required this.openingBookLines,
   });
 
   final GameRepository gameRepository;
@@ -162,6 +169,7 @@ class _GameBootstrap {
   final GameSettings settings;
   final Board initialBoard;
   final String initialFen;
+  final List<List<int>> openingBookLines;
 }
 
 class _LoadingFailure extends StatelessWidget {

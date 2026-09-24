@@ -86,12 +86,20 @@ void main() {
         aiStrength: AiStrength.hard,
         aiMaxDepth: 11,
         aiMaxThinkMs: 2800,
+        openingBookLines: const [
+          [1, 2],
+          [3, 4],
+        ],
       ),
     );
     await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
     expect(engine.strength, AiStrength.hard);
     expect(engine.maxDepth, 11);
     expect(engine.maxThinkMs, 2800);
+    expect(engine.openingBookLines, [
+      [1, 2],
+      [3, 4],
+    ]);
     expect(bloc.state.aiStrength, AiStrength.hard);
 
     bloc.add(
@@ -409,6 +417,12 @@ class ControlledChessEngine implements ChessEnginePort {
   final Completer<int> resumeMoveCompleter = Completer<int>();
   final List<int> restoredMoves = <int>[];
   bool disposed = false;
+  List<List<int>> openingBookLines = const [];
+
+  @override
+  Future<void> setOpeningBook(Iterable<List<int>> lines) async {
+    openingBookLines = lines.map(List<int>.from).toList(growable: false);
+  }
 
   @override
   Future<void> setStrength(

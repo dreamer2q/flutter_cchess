@@ -12,12 +12,6 @@ class HashItem {
   int dwLock1 = 0;
 }
 
-class BookItem {
-  int dwLock = 0;
-  int wmv = 0;
-  int wvl = 0;
-}
-
 class XqwlSearch {
   static const bool GEN_CAPTURE = true;
   static const bool NO_NULL = true;
@@ -25,8 +19,8 @@ class XqwlSearch {
   late List<int> nHistoryTable; // [65536] 历史表
   late List<List<int>> mvKillers; //[LIMIT_DEPTH][2] 杀手走法表
   late List<HashItem> hashTable; // [HASH_SIZE] 置换表
-  late List<BookItem> bookTable; // [BOOK_SIZE] 开局库
-  int nBookSize = 0; // 开局库大小
+  final Map<String, Map<int, int>> _bookByHistory = {};
+  int nBookSize = 0;
   int mvResult = 0; // 电脑走的棋
   final Stopwatch _searchClock = Stopwatch();
   int _maxThinkMs = 0;
@@ -41,18 +35,54 @@ class XqwlSearch {
     return nHistoryTable[lpmv2] - nHistoryTable[lpmv1];
   }
 
-  Future<void> loadBook() async {
-    // TODO 加载开局库
-    // sizeOf(BookItem);
-    // rootBundle.loadStructuredBinaryData(key, (data) => null);
+  void loadBook(Iterable<List<int>> lines) {
+    _bookByHistory.clear();
+    final validationPosition = XqwlPosition();
+
+    for (final line in lines) {
+      if (line.length < 2) continue;
+      validationPosition.startup();
+      final prefix = <int>[];
+      for (final move in line.take(24)) {
+        if (!validationPosition.legalMove(move)) break;
+        if (!validationPosition.makeMove(move)) break;
+        final candidates = _bookByHistory.putIfAbsent(
+          _bookKey(prefix),
+          () => <int, int>{},
+        );
+        candidates.update(move, (weight) => weight + 1, ifAbsent: () => 1);
+        prefix.add(move);
+      }
+    }
+    nBookSize = _bookByHistory.length;
   }
 
   int searchBook() {
-    if (nBookSize == 0) {
-      return 0;
+    if (_bookByHistory.isEmpty) return 0;
+    final history = [
+      for (var index = 1; index < pos.nMoveNum; index++) pos.mvsList[index].wmv,
+    ];
+    final candidates = _bookByHistory[_bookKey(history)];
+    if (candidates == null) return 0;
+
+    final legalCandidates = candidates.entries
+        .where((candidate) => pos.legalMove(candidate.key))
+        .toList(growable: false);
+    final totalWeight = legalCandidates.fold<int>(
+      0,
+      (total, candidate) => total + candidate.value,
+    );
+    if (totalWeight == 0) return 0;
+
+    var choice = Random().nextInt(totalWeight);
+    for (final candidate in legalCandidates) {
+      choice -= candidate.value;
+      if (choice < 0) return candidate.key;
     }
     return 0;
   }
+
+  String _bookKey(Iterable<int> moves) => moves.join(',');
 
   int probeHash(int vlAlpha, int vlBeta, int nDepth, List<int> mv) {
     bool bMate; // 杀棋标志：如果是杀棋，那么不需要满足深度条件
@@ -392,6 +422,12 @@ class XqwlSearch {
     _searchClock
       ..reset()
       ..start();
+    final bookMove = searchBook();
+    if (bookMove != 0) {
+      mvResult = bookMove;
+      _searchClock.stop();
+      return;
+    }
     List<int> mvs = [];
 
     // 初始化
