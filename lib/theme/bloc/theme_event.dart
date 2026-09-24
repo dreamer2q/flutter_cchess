@@ -12,3 +12,12 @@ class ThemeUpdated extends ThemeEvent {
   @override
   List<Object?> get props => [theme];
 }
+
+class ThemeAssetRequested extends ThemeEvent {
+  const ThemeAssetRequested(this.configAsset);
+
+  final String configAsset;
+
+  @override
+  List<Object?> get props => [configAsset];
+}

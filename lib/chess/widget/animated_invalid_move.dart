@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_cchess/chess/theme/motion_spec.dart';
 
 class AnimatedInvalidMove extends StatelessWidget {
   const AnimatedInvalidMove({
@@ -6,7 +7,7 @@ class AnimatedInvalidMove extends StatelessWidget {
     required this.begin,
     required this.end,
     required this.child,
-    this.duration = const Duration(milliseconds: 300),
+    this.duration = MotionSpec.invalidMove,
     this.onEnd,
   }) : super(key: key);
 
@@ -18,31 +19,46 @@ class AnimatedInvalidMove extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder(
+    final reducedMotion = MotionSpec.reducedMotionOf(context);
+    return TweenAnimationBuilder<double>(
       onEnd: onEnd,
-      curve: Curves.linearToEaseOut,
-      tween: InvalidMoveTween(begin: begin, end: end),
-      duration: duration,
-      builder: (BuildContext context, Alignment value, Widget? child) {
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: MotionSpec.durationOf(context, duration),
+      builder: (BuildContext context, double value, Widget? child) {
         return Align(
-          alignment: value,
-          child: child,
+          alignment: begin,
+          child: Transform.translate(
+            offset: Offset(
+              reducedMotion
+                  ? 0
+                  : _shakeOffset(value) * MotionSpec.invalidShakeDistance,
+              0,
+            ),
+            child: child,
+          ),
         );
       },
       child: child,
     );
   }
+
+  /// A short, damped shake that always starts and finishes at the source.
+  static double _shakeOffset(double t) {
+    const values = <double>[0, 1, -1, .7, -.7, 0];
+    final scaled = t.clamp(0.0, 1.0) * (values.length - 1);
+    final index = scaled.floor().clamp(0, values.length - 2);
+    final localT = scaled - index;
+    return values[index] + (values[index + 1] - values[index]) * localT;
+  }
 }
 
+/// Retained for source compatibility. Invalid moves no longer travel toward
+/// their attempted destination; use [AnimatedInvalidMove] for visible feedback.
+@Deprecated('Invalid moves now shake at their source square')
 class InvalidMoveTween extends Tween<Alignment> {
   InvalidMoveTween({Alignment? begin, Alignment? end})
       : super(begin: begin, end: end);
 
   @override
-  Alignment transform(double t) {
-    if (t == 0.0 || t == 1.0) return begin!;
-    t -= 0.5;
-    t = 1 - 4 * t * t;
-    return super.lerp(t);
-  }
+  Alignment transform(double t) => begin!;
 }

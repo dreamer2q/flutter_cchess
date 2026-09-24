@@ -28,10 +28,12 @@ class TimerReset extends TimerEvent {
 class TimerTicked extends TimerEvent {
   const TimerTicked({
     required this.duration,
+    this.runId,
   });
 
   final int duration;
+  final int? runId;
 
   @override
-  List<Object?> get props => [duration];
+  List<Object?> get props => [duration, runId];
 }

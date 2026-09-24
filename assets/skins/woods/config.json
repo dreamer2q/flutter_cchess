@@ -1,28 +1,36 @@
 {
-  "width": 521,
-  "height": 577,
-  "size": 57,
-  "offset": {
-    "dx": 4,
-    "dy": 3
+  "id": "classic-wood",
+  "name": "经典木纹",
+  "board": {
+    "asset": "assets/skins/woods/board.jpg",
+    "width": 521,
+    "height": 577,
+    "anchors": {
+      "topLeft": [32.5, 31.5],
+      "topRight": [488.5, 31.5],
+      "bottomLeft": [32.5, 544.5],
+      "bottomRight": [488.5, 544.5]
+    }
   },
-  "board": "board.jpg",
-  "red": {
-    "k": "rk.png",
-    "a": "ra.png",
-    "b": "rb.png",
-    "c": "rc.png",
-    "n": "rn.png",
-    "r": "rr.png",
-    "p": "rp.png"
-  },
-  "black": {
-    "K": "bk.png",
-    "A": "ba.png",
-    "B": "bb.png",
-    "C": "bc.png",
-    "N": "bn.png",
-    "R": "br.png",
-    "P": "bp.png"
+  "pieceSize": 57,
+  "pieces": {
+    "red": {
+      "k": "assets/skins/woods/rk.png",
+      "a": "assets/skins/woods/ra.png",
+      "b": "assets/skins/woods/rb.png",
+      "n": "assets/skins/woods/rn.png",
+      "r": "assets/skins/woods/rr.png",
+      "c": "assets/skins/woods/rc.png",
+      "p": "assets/skins/woods/rp.png"
+    },
+    "black": {
+      "k": "assets/skins/woods/bk.png",
+      "a": "assets/skins/woods/ba.png",
+      "b": "assets/skins/woods/bb.png",
+      "n": "assets/skins/woods/bn.png",
+      "r": "assets/skins/woods/br.png",
+      "c": "assets/skins/woods/bc.png",
+      "p": "assets/skins/woods/bp.png"
+    }
   }
 }

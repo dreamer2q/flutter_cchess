@@ -1,11 +1,6 @@
-import 'dart:ffi';
 import 'dart:math';
 
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/engine/xqlite/position.dart';
-import 'package:flutter_cchess/engine/xqlite/struct.dart';
 
 class HashItem {
   int ucDepth = 0;
@@ -48,20 +43,9 @@ class XqwlSearch {
   }
 
   int searchBook() {
-    int i = 0, vl = 0, nBookMoves = 0, mv = 0;
-    List<int> mvs = [];
-    List<int> vls = [];
-    bool bMirror = false;
-    BookItem bkToSearch = BookItem();
-    BookItem lpbk;
-    XqwlPosition posMirror = XqwlPosition();
     if (nBookSize == 0) {
       return 0;
     }
-
-    bMirror = false;
-    bkToSearch.dwLock = pos.zobr.dwLock1;
-
     return 0;
   }
 
@@ -131,7 +115,7 @@ class XqwlSearch {
   static const cucMvvLva /*[24]*/ = [
     0, 0, 0, 0, 0, 0, 0, 0, //
     5, 1, 1, 3, 4, 3, 2, 0,
-    5, 1, 1, 3, 4, 3, 2, 0
+    5, 1, 1, 3, 4, 3, 2, 0,
   ];
 
   // 求MVV/LVA值
@@ -145,10 +129,10 @@ class XqwlSearch {
     return mvvLva(lpmv2) - mvvLva(lpmv1);
   }
 
-// // "qsort"按历史表排序的比较函数
-// static int CompareHistory(const void *lpmv1, const void *lpmv2) {
-//   return Search.nHistoryTable[*(int *) lpmv2] - Search.nHistoryTable[*(int *) lpmv1];
-// }
+  // // "qsort"按历史表排序的比较函数
+  // static int CompareHistory(const void *lpmv1, const void *lpmv2) {
+  //   return Search.nHistoryTable[*(int *) lpmv2] - Search.nHistoryTable[*(int *) lpmv1];
+  // }
 
   void setBestMove(int mv, int nDepth) {
     List<int> lpmvKillers;
@@ -271,7 +255,11 @@ class XqwlSearch {
     if (!bNoNull && !pos.inCheck() && pos.nullOkey()) {
       pos.nullMove();
       vl = -searchFull(
-          -vlBeta, 1 - vlBeta, nDepth - XqwlPosition.NULL_DEPTH - 1, NO_NULL);
+        -vlBeta,
+        1 - vlBeta,
+        nDepth - XqwlPosition.NULL_DEPTH - 1,
+        NO_NULL,
+      );
       pos.undoNullMove();
       if (vl >= vlBeta) {
         return vl;
@@ -337,7 +325,7 @@ class XqwlSearch {
     return vlBest;
   }
 
-// 根节点的Alpha-Beta搜索过程
+  // 根节点的Alpha-Beta搜索过程
   int searchRoot(int nDepth) {
     int vl, vlBest, mv, nNewDepth;
     Random random = Random();
@@ -348,13 +336,21 @@ class XqwlSearch {
       if (pos.makeMove(mv)) {
         nNewDepth = pos.inCheck() ? nDepth : nDepth - 1;
         if (vlBest == -XqwlPosition.MATE_VALUE) {
-          vl = -searchFull(-XqwlPosition.MATE_VALUE, XqwlPosition.MATE_VALUE,
-              nNewDepth, NO_NULL);
+          vl = -searchFull(
+            -XqwlPosition.MATE_VALUE,
+            XqwlPosition.MATE_VALUE,
+            nNewDepth,
+            NO_NULL,
+          );
         } else {
           vl = -searchFull(-vlBest - 1, -vlBest, nNewDepth);
           if (vl > vlBest) {
             vl = -searchFull(
-                -XqwlPosition.MATE_VALUE, -vlBest, nNewDepth, NO_NULL);
+              -XqwlPosition.MATE_VALUE,
+              -vlBest,
+              nNewDepth,
+              NO_NULL,
+            );
           }
         }
         pos.undoMakeMove();
@@ -363,7 +359,8 @@ class XqwlSearch {
           mvResult = mv;
           if (vlBest > -XqwlPosition.WIN_VALUE &&
               vlBest < XqwlPosition.WIN_VALUE) {
-            vlBest += random.nextInt(XqwlPosition.RANDOM_MASK + 1) -
+            vlBest +=
+                random.nextInt(XqwlPosition.RANDOM_MASK + 1) -
                 random.nextInt(XqwlPosition.RANDOM_MASK + 1);
           }
         }
@@ -381,8 +378,10 @@ class XqwlSearch {
     // 初始化
     nHistoryTable = List.filled(65536, 0); // 清空历史表
     hashTable = List.generate(XqwlPosition.HASH_SIZE, (_) => HashItem());
-    mvKillers =
-        List.generate(XqwlPosition.LIMIT_DEPTH, (_) => List.filled(2, 0));
+    mvKillers = List.generate(
+      XqwlPosition.LIMIT_DEPTH,
+      (_) => List.filled(2, 0),
+    );
 
     pos.nDistance = 0; // 初始步数
 

@@ -1,0 +1,40 @@
+{
+  "id": "night-walnut",
+  "name": "夜间胡桃木",
+  "board": {
+    "asset": "assets/skins/night/board.png",
+    "width": 900,
+    "height": 1000,
+    "anchors": {
+      "topLeft": [50, 50],
+      "topRight": [850, 50],
+      "bottomLeft": [50, 950],
+      "bottomRight": [850, 950]
+    }
+  },
+  "pieceSize": 100,
+  "pieces": {
+    "red": {
+      "k": "assets/skins/night/pieces/rk.png",
+      "a": "assets/skins/night/pieces/ra.png",
+      "b": "assets/skins/night/pieces/rb.png",
+      "n": "assets/skins/night/pieces/rn.png",
+      "r": "assets/skins/night/pieces/rr.png",
+      "c": "assets/skins/night/pieces/rc.png",
+      "p": "assets/skins/night/pieces/rp.png"
+    },
+    "black": {
+      "k": "assets/skins/night/pieces/bk.png",
+      "a": "assets/skins/night/pieces/ba.png",
+      "b": "assets/skins/night/pieces/bb.png",
+      "n": "assets/skins/night/pieces/bn.png",
+      "r": "assets/skins/night/pieces/br.png",
+      "c": "assets/skins/night/pieces/bc.png",
+      "p": "assets/skins/night/pieces/bp.png"
+    }
+  },
+  "backgrounds": {
+    "mobile": "assets/skins/night/background-mobile.png",
+    "desktop": "assets/skins/night/background-desktop.png"
+  }
+}
