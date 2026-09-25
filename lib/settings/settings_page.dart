@@ -423,8 +423,8 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
           Slider(
             value: _depth,
             min: 1,
-            max: 64,
-            divisions: 63,
+            max: AiStrength.maxConfiguredDepth.toDouble(),
+            divisions: AiStrength.maxConfiguredDepth - 1,
             label: '$depth 层',
             onChanged: (value) => setState(() => _depth = value),
             onChangeEnd: (value) => widget.onUpdate(
@@ -441,8 +441,8 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
           Slider(
             value: _thinkMs,
             min: 100,
-            max: 10000,
-            divisions: 99,
+            max: AiStrength.maxConfiguredThinkMs.toDouble(),
+            divisions: (AiStrength.maxConfiguredThinkMs - 100) ~/ 50,
             label: _formatThinkTime(thinkMs),
             onChanged: (value) => setState(() => _thinkMs = value),
             onChangeEnd: (value) => widget.onUpdate(

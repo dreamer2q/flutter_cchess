@@ -21,8 +21,8 @@ void main() {
       hapticsEnabled: false,
       motionPreference: MotionPreference.reduced,
       aiStrength: AiStrength.hard,
-      aiMaxDepth: 12,
-      aiMaxThinkMs: 3200,
+      aiMaxDepth: 7,
+      aiMaxThinkMs: 1900,
     );
 
     expect(settings.toJson(), <String, Object>{
@@ -33,8 +33,8 @@ void main() {
       'hapticsEnabled': false,
       'motionPreference': 'reduced',
       'aiStrength': 'hard',
-      'aiMaxDepth': 12,
-      'aiMaxThinkMs': 3200,
+      'aiMaxDepth': 7,
+      'aiMaxThinkMs': 1900,
     });
     expect(GameSettings.decode(settings.encode()), settings);
   });
@@ -63,6 +63,33 @@ void main() {
     expect(settings.aiStrength, AiStrength.hard);
     expect(settings.aiMaxDepth, AiStrength.hard.maxDepth);
     expect(settings.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
+  });
+
+  test('migrates the old hard preset and bounds saved custom limits', () {
+    final oldPreset = GameSettings.fromJson(<String, dynamic>{
+      'schemaVersion': 3,
+      'aiStrength': 'hard',
+      'aiMaxDepth': 64,
+      'aiMaxThinkMs': 5000,
+    });
+    expect(oldPreset.aiMaxDepth, AiStrength.hard.maxDepth);
+    expect(oldPreset.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
+
+    final custom = GameSettings.fromJson(<String, dynamic>{
+      'schemaVersion': 3,
+      'aiStrength': 'normal',
+      'aiMaxDepth': 64,
+      'aiMaxThinkMs': 10000,
+    });
+    expect(custom.aiMaxDepth, AiStrength.maxConfiguredDepth);
+    expect(custom.aiMaxThinkMs, AiStrength.maxConfiguredThinkMs);
+  });
+
+  test('keeps configured AI budgets within supported device limits', () {
+    expect(AiStrength.hard.maxDepth, 6);
+    expect(AiStrength.hard.maxThinkMs, 1500);
+    expect(AiStrength.clampDepth(64), AiStrength.maxConfiguredDepth);
+    expect(AiStrength.clampThinkMs(10000), AiStrength.maxConfiguredThinkMs);
   });
 
   test('falls back when stored theme assets have been removed', () {

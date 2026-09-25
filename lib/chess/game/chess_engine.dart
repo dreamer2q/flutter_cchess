@@ -81,8 +81,12 @@ class ChessEngine implements ChessEnginePort {
         case 'board.setStrength':
           final settings = Map<String, Object?>.from(params as Map);
           strength = AiStrength.fromName(settings['strength'] as String?);
-          maxDepth = settings['maxDepth'] as int? ?? strength.maxDepth;
-          maxThinkMs = settings['maxThinkMs'] as int? ?? strength.maxThinkMs;
+          maxDepth = AiStrength.clampDepth(
+            settings['maxDepth'] as int? ?? strength.maxDepth,
+          );
+          maxThinkMs = AiStrength.clampThinkMs(
+            settings['maxThinkMs'] as int? ?? strength.maxThinkMs,
+          );
           break;
         case 'board.setOpeningBook':
           final lines = (params as Iterable).map(
