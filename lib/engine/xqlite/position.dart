@@ -31,7 +31,7 @@ class XqwlPosition {
   static const int RANDOM_MASK = 7; // 随机性分值
   static const int NULL_MARGIN = 400; // 空步裁剪的子力边界
   static const int NULL_DEPTH = 2; // 空步裁剪的裁剪深度
-  static const int HASH_SIZE = 1 << 20; // 置换表大小
+  static const int HASH_SIZE = 1 << 16; // 置换表大小
   static const int HASH_ALPHA = 1; // ALPHA节点的置换表项
   static const int HASH_BETA = 2; // BETA节点的置换表项
   static const int HASH_PV = 3; // PV节点的置换表项

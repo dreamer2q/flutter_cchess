@@ -1,35 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
+import 'package:flutter_cchess/chess/notation/game_notation.dart';
 import 'package:flutter_cchess/chess/theme/wood_theme.dart';
 import 'package:flutter_cchess/chess/view/chess_page.dart';
+import 'package:flutter_cchess/help/help_pages.dart';
+import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
+import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/utils/fen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NewChessPage extends StatefulWidget {
-  const NewChessPage({super.key});
+  const NewChessPage({super.key, this.pickNotationFile});
+
+  final Future<XFile?> Function()? pickNotationFile;
 
   @override
   State<NewChessPage> createState() => _NewChessPageState();
 }
 
 class _NewChessPageState extends State<NewChessPage> {
-  late Future<GameRecord?> _currentGame = _loadCurrentGame();
+  late Future<_HomeData> _homeData = _loadHomeData();
+  int _timeControlSeconds = 900;
+  AiStrength? _selectedStrength;
 
-  Future<GameRecord?> _loadCurrentGame() async {
+  Future<_HomeData> _loadHomeData() async {
     final preferences = await SharedPreferences.getInstance();
     final record = await SharedPreferencesGameRepository(
       preferences,
     ).getLatestInProgress();
-    return record?.result == GameResult.inProgress ? record : null;
+    final settings = await SharedPreferencesGameSettingsRepository(
+      preferences,
+    ).load();
+    return _HomeData(
+      currentGame: record?.result == GameResult.inProgress ? record : null,
+      settings: settings,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<GameRecord?>(
-      future: _currentGame,
+    return FutureBuilder<_HomeData>(
+      future: _homeData,
       builder: (context, snapshot) {
-        final currentGame = snapshot.data;
+        final data = snapshot.data ?? const _HomeData();
+        final currentGame = data.currentGame;
+        final aiStrength = _selectedStrength ?? data.settings.aiStrength;
         return Scaffold(
           backgroundColor: const Color(0xFFF0F2F1),
           body: SafeArea(
@@ -38,18 +57,36 @@ class _NewChessPageState extends State<NewChessPage> {
                 final desktop = constraints.maxWidth >= 860;
                 return Column(
                   children: [
-                    const _HomeHeader(),
+                    _HomeHeader(
+                      onHelp: _openRules,
+                      onAbout: _openAbout,
+                      onSettings: () => _openSettings(data.settings),
+                    ),
                     Expanded(
                       child: desktop
                           ? _DesktopHome(
                               currentGame: currentGame,
-                              onOpen: _openGame,
+                              onOpen: (mode) => _openGame(mode, data.settings),
                               onContinue: _continueGame,
+                              onImport: _importRecord,
+                              timeControlSeconds: _timeControlSeconds,
+                              aiStrength: aiStrength,
+                              onTimeChanged: (value) =>
+                                  setState(() => _timeControlSeconds = value),
+                              onStrengthChanged: (value) =>
+                                  setState(() => _selectedStrength = value),
                             )
                           : _MobileHome(
                               currentGame: currentGame,
-                              onOpen: _openGame,
+                              onOpen: (mode) => _openGame(mode, data.settings),
                               onContinue: _continueGame,
+                              onImport: _importRecord,
+                              timeControlSeconds: _timeControlSeconds,
+                              aiStrength: aiStrength,
+                              onTimeChanged: (value) =>
+                                  setState(() => _timeControlSeconds = value),
+                              onStrengthChanged: (value) =>
+                                  setState(() => _selectedStrength = value),
                             ),
                     ),
                   ],
@@ -62,11 +99,25 @@ class _NewChessPageState extends State<NewChessPage> {
     );
   }
 
-  Future<void> _openGame(PlayMode playMode) async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => ChessPage(playMode: playMode)));
-    _reloadCurrentGame();
+  Future<void> _openGame(PlayMode playMode, GameSettings settings) async {
+    final strength = _selectedStrength ?? settings.aiStrength;
+    final usesConfiguredLimits = strength == settings.aiStrength;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChessPage(
+          playMode: playMode,
+          timeControlSeconds: _timeControlSeconds,
+          aiStrength: strength,
+          aiMaxDepth: usesConfiguredLimits
+              ? settings.aiMaxDepth
+              : strength.maxDepth,
+          aiMaxThinkMs: usesConfiguredLimits
+              ? settings.aiMaxThinkMs
+              : strength.maxThinkMs,
+        ),
+      ),
+    );
+    _reloadHome();
   }
 
   Future<void> _continueGame(GameRecord record) async {
@@ -78,44 +129,141 @@ class _NewChessPageState extends State<NewChessPage> {
         builder: (_) => ChessPage(playMode: mode, initialRecord: record),
       ),
     );
-    _reloadCurrentGame();
+    _reloadHome();
   }
 
-  void _reloadCurrentGame() {
-    if (mounted) setState(() => _currentGame = _loadCurrentGame());
+  Future<void> _openRules() => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(builder: (_) => const XiangqiRulesPage()),
+  );
+
+  Future<void> _openAbout() => Navigator.of(
+    context,
+  ).push<void>(MaterialPageRoute<void>(builder: (_) => const AboutPage()));
+
+  Future<void> _importRecord() async {
+    try {
+      final file = await (widget.pickNotationFile?.call() ?? openFile());
+      if (file == null) return;
+      if (await file.length() > 2 * 1024 * 1024) {
+        throw const FormatException('棋谱文件不能超过 2 MB。');
+      }
+      final record = GameNotationImporter.parse(await file.readAsString());
+      final preferences = await SharedPreferences.getInstance();
+      await SharedPreferencesGameRepository(preferences).save(record);
+      if (mounted) await _continueGame(record);
+    } on FormatException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法读取棋谱文件。')));
+      }
+    }
+  }
+
+  Future<void> _openSettings(GameSettings settings) async {
+    final preferences = await SharedPreferences.getInstance();
+    final repository = SharedPreferencesGameSettingsRepository(preferences);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => BlocProvider(
+          create: (_) =>
+              ThemeBloc()..add(ThemeAssetRequested(settings.themeConfigAsset)),
+          child: GameSettingsPage(
+            initialSettings: settings,
+            onSettingsChanged: repository.save,
+          ),
+        ),
+      ),
+    );
+    _reloadHome();
+  }
+
+  void _reloadHome() {
+    if (mounted) {
+      setState(() {
+        _selectedStrength = null;
+        _homeData = _loadHomeData();
+      });
+    }
   }
 }
 
+class _HomeData {
+  const _HomeData({this.currentGame, this.settings = const GameSettings()});
+
+  final GameRecord? currentGame;
+  final GameSettings settings;
+}
+
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  const _HomeHeader({
+    required this.onHelp,
+    required this.onAbout,
+    required this.onSettings,
+  });
+
+  final VoidCallback onHelp;
+  final VoidCallback onAbout;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 64,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          children: [
-            const Icon(Icons.grid_4x4, color: Color(0xFF202625), size: 22),
-            const SizedBox(width: 12),
-            Text(
-              '中国象棋',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: const Color(0xFF202625),
-                fontWeight: FontWeight.w700,
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showMode = constraints.maxWidth >= 420;
+        return SizedBox(
+          height: 64,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                const Icon(Icons.grid_4x4, color: Color(0xFF202625), size: 22),
+                const SizedBox(width: 12),
+                Text(
+                  '中国象棋',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: const Color(0xFF202625),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                if (showMode)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text(
+                      '离线对局',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF68716E),
+                      ),
+                    ),
+                  ),
+                IconButton(
+                  tooltip: '象棋规则',
+                  onPressed: onHelp,
+                  icon: const Icon(Icons.help_outline_rounded),
+                ),
+                IconButton(
+                  tooltip: '关于中国象棋',
+                  onPressed: onAbout,
+                  icon: const Icon(Icons.info_outline_rounded),
+                ),
+                IconButton(
+                  tooltip: '设置',
+                  onPressed: onSettings,
+                  icon: const Icon(Icons.settings_outlined),
+                ),
+              ],
             ),
-            const Spacer(),
-            Text(
-              '离线对局',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF68716E)),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -124,12 +272,22 @@ class _DesktopHome extends StatelessWidget {
   const _DesktopHome({
     required this.onOpen,
     required this.onContinue,
+    required this.onImport,
     required this.currentGame,
+    required this.timeControlSeconds,
+    required this.aiStrength,
+    required this.onTimeChanged,
+    required this.onStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
   final ValueChanged<GameRecord> onContinue;
+  final VoidCallback onImport;
   final GameRecord? currentGame;
+  final int timeControlSeconds;
+  final AiStrength aiStrength;
+  final ValueChanged<int> onTimeChanged;
+  final ValueChanged<AiStrength> onStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +305,12 @@ class _DesktopHome extends StatelessWidget {
                 child: _ModeChooser(
                   onOpen: onOpen,
                   onContinue: onContinue,
+                  onImport: onImport,
                   currentGame: currentGame,
+                  timeControlSeconds: timeControlSeconds,
+                  aiStrength: aiStrength,
+                  onTimeChanged: onTimeChanged,
+                  onStrengthChanged: onStrengthChanged,
                 ),
               ),
             ],
@@ -162,12 +325,22 @@ class _MobileHome extends StatelessWidget {
   const _MobileHome({
     required this.onOpen,
     required this.onContinue,
+    required this.onImport,
     required this.currentGame,
+    required this.timeControlSeconds,
+    required this.aiStrength,
+    required this.onTimeChanged,
+    required this.onStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
   final ValueChanged<GameRecord> onContinue;
+  final VoidCallback onImport;
   final GameRecord? currentGame;
+  final int timeControlSeconds;
+  final AiStrength aiStrength;
+  final ValueChanged<int> onTimeChanged;
+  final ValueChanged<AiStrength> onStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +353,12 @@ class _MobileHome extends StatelessWidget {
           _ModeChooser(
             onOpen: onOpen,
             onContinue: onContinue,
+            onImport: onImport,
             currentGame: currentGame,
+            timeControlSeconds: timeControlSeconds,
+            aiStrength: aiStrength,
+            onTimeChanged: onTimeChanged,
+            onStrengthChanged: onStrengthChanged,
           ),
         ],
       ),
@@ -262,12 +440,22 @@ class _ModeChooser extends StatelessWidget {
   const _ModeChooser({
     required this.onOpen,
     required this.onContinue,
+    required this.onImport,
     required this.currentGame,
+    required this.timeControlSeconds,
+    required this.aiStrength,
+    required this.onTimeChanged,
+    required this.onStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
   final ValueChanged<GameRecord> onContinue;
+  final VoidCallback onImport;
   final GameRecord? currentGame;
+  final int timeControlSeconds;
+  final AiStrength aiStrength;
+  final ValueChanged<int> onTimeChanged;
+  final ValueChanged<AiStrength> onStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -292,6 +480,63 @@ class _ModeChooser extends StatelessWidget {
             ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF68716E)),
           ),
           const SizedBox(height: 22),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final timeField = DropdownButtonFormField<int>(
+                initialValue: timeControlSeconds,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '每方用时',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 300, child: Text('5 分钟')),
+                  DropdownMenuItem(value: 600, child: Text('10 分钟')),
+                  DropdownMenuItem(value: 900, child: Text('15 分钟')),
+                  DropdownMenuItem(value: 1800, child: Text('30 分钟')),
+                  DropdownMenuItem(value: 0, child: Text('不限时')),
+                ],
+                onChanged: (value) {
+                  if (value != null) onTimeChanged(value);
+                },
+              );
+              final strengthField = DropdownButtonFormField<AiStrength>(
+                initialValue: aiStrength,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '电脑强度',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: AiStrength.easy, child: Text('入门')),
+                  DropdownMenuItem(value: AiStrength.normal, child: Text('普通')),
+                  DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
+                ],
+                onChanged: (value) {
+                  if (value != null) onStrengthChanged(value);
+                },
+              );
+              if (constraints.maxWidth < 340) {
+                return Column(
+                  children: [
+                    timeField,
+                    const SizedBox(height: 12),
+                    strengthField,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: timeField),
+                  const SizedBox(width: 12),
+                  Expanded(child: strengthField),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 18),
           if (currentGame != null) ...[
             _ModeButton(
               icon: Icons.play_arrow,
@@ -316,6 +561,12 @@ class _ModeChooser extends StatelessWidget {
             title: '本地双人',
             description: '同一设备轮流落子',
             onTap: () => onOpen(PlayMode.withSelf),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onImport,
+            icon: const Icon(Icons.folder_open_outlined),
+            label: const Text('导入棋谱'),
           ),
           const SizedBox(height: 18),
           Row(

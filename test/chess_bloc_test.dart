@@ -21,6 +21,101 @@ void main() {
     await bloc.close();
   });
 
+  test(
+    'clock switches sides, pauses, persists, and awards a timeout',
+    () async {
+      var now = 0;
+      final ticker = _ManualTicker();
+      final repository = InMemoryGameRepository();
+      final bloc = _bloc(
+        ticker: ticker,
+        clockNowMs: () => now,
+        repository: repository,
+      );
+      bloc.add(
+        ChessEventInitialized(
+          initialBoard: FenUtil.parse(initialFenString),
+          playMode: PlayMode.withSelf,
+          timeControlSeconds: 5,
+        ),
+      );
+      await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
+      expect(bloc.state.remainingSeconds(PlaySide.red), 5);
+
+      now = 1200;
+      ticker.fire();
+      await _waitFor(bloc, (s) => s.redElapsedMs == 1200);
+      expect(bloc.state.remainingSeconds(PlaySide.red), 4);
+
+      now = 2300;
+      bloc.add(ChessEventMoveRequested(bloc.state.board.getMoves().first));
+      await _waitFor(bloc, (s) => s.board.lastMoves.length == 1);
+      expect(bloc.state.redElapsedMs, 2300);
+      now = 3500;
+      bloc.add(const ChessEventPause());
+      await _waitFor(bloc, (s) => s.phase == GamePhase.paused);
+      expect(bloc.state.blackElapsedMs, 1200);
+      now = 10000;
+      ticker.fire();
+      expect(bloc.state.blackElapsedMs, 1200);
+
+      bloc.add(const ChessEventResume());
+      await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
+      now = 13800;
+      ticker.fire();
+      await _waitFor(bloc, (s) => s.phase == GamePhase.finished);
+      expect(bloc.state.winningSide, PlaySide.red);
+      await bloc.flushPersistence();
+      final record = await repository.getCurrent();
+      expect(record?.timeControlSeconds, 5);
+      expect(record?.redElapsedMs, 2300);
+      expect(record?.blackElapsedMs, 5000);
+      expect(record?.result, GameResult.redWin);
+      await bloc.close();
+      await ticker.dispose();
+    },
+  );
+
+  test('selected AI strength reaches the engine', () async {
+    final engine = ControlledChessEngine();
+    final repository = InMemoryGameRepository();
+    final bloc = _bloc(engine: engine, repository: repository);
+    bloc.add(
+      ChessEventInitialized(
+        initialBoard: FenUtil.parse(initialFenString),
+        aiStrength: AiStrength.hard,
+        aiMaxDepth: 11,
+        aiMaxThinkMs: 2800,
+        openingBookLines: const [
+          [1, 2],
+          [3, 4],
+        ],
+      ),
+    );
+    await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
+    expect(engine.strength, AiStrength.hard);
+    expect(engine.maxDepth, 11);
+    expect(engine.maxThinkMs, 2800);
+    expect(engine.openingBookLines, [
+      [1, 2],
+      [3, 4],
+    ]);
+    expect(bloc.state.aiStrength, AiStrength.hard);
+
+    bloc.add(
+      const ChessEventAiSettingsChanged(
+        aiStrength: AiStrength.easy,
+        aiMaxDepth: 2,
+        aiMaxThinkMs: 450,
+      ),
+    );
+    await _waitFor(bloc, (s) => s.aiMaxDepth == 2);
+    await bloc.flushPersistence();
+    expect(engine.maxThinkMs, 450);
+    expect((await repository.getCurrent())?.aiMaxDepth, 2);
+    await bloc.close();
+  });
+
   test('legal move commits before presentation is acknowledged', () async {
     final bloc = _bloc();
     await _initialize(bloc, PlayMode.withSelf);
@@ -272,8 +367,28 @@ Board _apply(Board board, MovePos move) => board.copyWith(
   actions: board.actions.rebuild((b) => b..add(BoardMoveAction(move.mv))),
 );
 
-ChessBloc _bloc({GameRepository? repository, ChessEnginePort? engine}) =>
-    ChessBloc(ticker: Ticker(), repository: repository, engine: engine);
+ChessBloc _bloc({
+  GameRepository? repository,
+  ChessEnginePort? engine,
+  Ticker ticker = const Ticker(),
+  int Function()? clockNowMs,
+}) => ChessBloc(
+  ticker: ticker,
+  repository: repository,
+  engine: engine,
+  clockNowMs: clockNowMs,
+);
+
+class _ManualTicker extends Ticker {
+  final _controller = StreamController<int>();
+
+  @override
+  Stream<int> tick({required int ticks}) => _controller.stream;
+
+  void fire() => _controller.add(0);
+
+  Future<void> dispose() => _controller.close();
+}
 
 Future<void> _initialize(ChessBloc bloc, PlayMode mode) async {
   bloc.add(
@@ -294,11 +409,31 @@ Future<ChessState> _waitFor(
 }
 
 class ControlledChessEngine implements ChessEnginePort {
+  AiStrength strength = AiStrength.normal;
+  int maxDepth = AiStrength.normal.maxDepth;
+  int maxThinkMs = AiStrength.normal.maxThinkMs;
   final Completer<int> makeMoveCompleter = Completer<int>();
   final Completer<int> hintCompleter = Completer<int>();
   final Completer<int> resumeMoveCompleter = Completer<int>();
   final List<int> restoredMoves = <int>[];
   bool disposed = false;
+  List<List<int>> openingBookLines = const [];
+
+  @override
+  Future<void> setOpeningBook(Iterable<List<int>> lines) async {
+    openingBookLines = lines.map(List<int>.from).toList(growable: false);
+  }
+
+  @override
+  Future<void> setStrength(
+    AiStrength value, {
+    int? maxDepth,
+    int? maxThinkMs,
+  }) async {
+    strength = value;
+    this.maxDepth = maxDepth ?? value.maxDepth;
+    this.maxThinkMs = maxThinkMs ?? value.maxThinkMs;
+  }
 
   @override
   Future<int> makeMove(int mv) => makeMoveCompleter.future;

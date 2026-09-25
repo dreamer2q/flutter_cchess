@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
+
 /// Controls how much non-essential animation the app should use.
 enum MotionPreference {
   system('system'),
@@ -26,9 +28,12 @@ class GameSettings {
     this.musicEnabled = false,
     this.hapticsEnabled = true,
     this.motionPreference = MotionPreference.system,
+    this.aiStrength = AiStrength.normal,
+    this.aiMaxDepth = 5,
+    this.aiMaxThinkMs = 1500,
   });
 
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
   static const String defaultThemeConfigAsset =
       'assets/skins/woods/config.json';
 
@@ -37,6 +42,9 @@ class GameSettings {
   final bool musicEnabled;
   final bool hapticsEnabled;
   final MotionPreference motionPreference;
+  final AiStrength aiStrength;
+  final int aiMaxDepth;
+  final int aiMaxThinkMs;
 
   GameSettings copyWith({
     String? themeConfigAsset,
@@ -44,6 +52,9 @@ class GameSettings {
     bool? musicEnabled,
     bool? hapticsEnabled,
     MotionPreference? motionPreference,
+    AiStrength? aiStrength,
+    int? aiMaxDepth,
+    int? aiMaxThinkMs,
   }) {
     return GameSettings(
       themeConfigAsset: themeConfigAsset ?? this.themeConfigAsset,
@@ -51,6 +62,9 @@ class GameSettings {
       musicEnabled: musicEnabled ?? this.musicEnabled,
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
       motionPreference: motionPreference ?? this.motionPreference,
+      aiStrength: aiStrength ?? this.aiStrength,
+      aiMaxDepth: aiMaxDepth ?? this.aiMaxDepth,
+      aiMaxThinkMs: aiMaxThinkMs ?? this.aiMaxThinkMs,
     );
   }
 
@@ -61,13 +75,19 @@ class GameSettings {
     'musicEnabled': musicEnabled,
     'hapticsEnabled': hapticsEnabled,
     'motionPreference': motionPreference.storageValue,
+    'aiStrength': aiStrength.name,
+    'aiMaxDepth': aiMaxDepth,
+    'aiMaxThinkMs': aiMaxThinkMs,
   };
 
   String encode() => jsonEncode(toJson());
 
   factory GameSettings.fromJson(Map<String, dynamic> json) {
     final version = json['schemaVersion'];
-    if (version != null && version != 1 && version != schemaVersion) {
+    if (version != null &&
+        version != 1 &&
+        version != 2 &&
+        version != schemaVersion) {
       throw FormatException('Unsupported settings schema version: $version');
     }
 
@@ -75,8 +95,7 @@ class GameSettings {
     final storedThemeConfigAsset =
         json['themeConfigAsset'] ?? defaults.themeConfigAsset;
     final themeConfigAsset =
-        version == 1 &&
-            storedThemeConfigAsset == 'assets/skins/maple/config.json'
+        storedThemeConfigAsset == 'assets/skins/maple/config.json'
         ? defaultThemeConfigAsset
         : storedThemeConfigAsset;
     final soundEnabled = json['soundEnabled'] ?? defaults.soundEnabled;
@@ -85,6 +104,13 @@ class GameSettings {
     final motionValue =
         json['motionPreference'] ?? defaults.motionPreference.storageValue;
     final motionPreference = MotionPreference.fromStorageValue(motionValue);
+    final strengthValue = json['aiStrength'];
+    if (strengthValue != null && strengthValue is! String) {
+      throw const FormatException('Invalid AI strength.');
+    }
+    final aiStrength = AiStrength.fromName(strengthValue as String?);
+    final aiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
+    final aiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
 
     if (themeConfigAsset is! String ||
         themeConfigAsset.isEmpty ||
@@ -94,6 +120,14 @@ class GameSettings {
         motionPreference == null) {
       throw const FormatException('Invalid game settings.');
     }
+    if (aiMaxDepth is! int ||
+        aiMaxDepth < 1 ||
+        aiMaxDepth > 64 ||
+        aiMaxThinkMs is! int ||
+        aiMaxThinkMs < 100 ||
+        aiMaxThinkMs > 10000) {
+      throw const FormatException('Invalid AI settings.');
+    }
 
     return GameSettings(
       themeConfigAsset: themeConfigAsset,
@@ -101,6 +135,9 @@ class GameSettings {
       musicEnabled: musicEnabled,
       hapticsEnabled: hapticsEnabled,
       motionPreference: motionPreference,
+      aiStrength: aiStrength,
+      aiMaxDepth: aiMaxDepth,
+      aiMaxThinkMs: aiMaxThinkMs,
     );
   }
 
@@ -119,7 +156,10 @@ class GameSettings {
         other.soundEnabled == soundEnabled &&
         other.musicEnabled == musicEnabled &&
         other.hapticsEnabled == hapticsEnabled &&
-        other.motionPreference == motionPreference;
+        other.motionPreference == motionPreference &&
+        other.aiStrength == aiStrength &&
+        other.aiMaxDepth == aiMaxDepth &&
+        other.aiMaxThinkMs == aiMaxThinkMs;
   }
 
   @override
@@ -129,5 +169,8 @@ class GameSettings {
     musicEnabled,
     hapticsEnabled,
     motionPreference,
+    aiStrength,
+    aiMaxDepth,
+    aiMaxThinkMs,
   );
 }

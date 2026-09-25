@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
+import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/models/piece.dart';
 
 import 'package:flutter_cchess/theme/themes/board_theme.dart';
@@ -26,11 +27,13 @@ class WoodsBoardTheme extends BoardTheme {
 
   @override
   Widget buildBoard(BuildContext context) {
-    return Image.asset(
-      boardAsset,
-      width: boardSize.width,
-      height: boardSize.height,
-      fit: BoxFit.fill,
+    return buildBoardSurface(
+      Image.asset(
+        boardAsset,
+        width: boardSize.width,
+        height: boardSize.height,
+        fit: BoxFit.fill,
+      ),
     );
   }
 
@@ -130,22 +133,9 @@ class WoodsBoardTheme extends BoardTheme {
 
   @override
   Widget buildSelectedPiece(BuildContext context, ChessPiece piece) {
-    return SizedBox.square(
+    return BoardCornerMarker(
       dimension: pieceSize,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          buildPiece(context, piece),
-          IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF168A65), width: 2),
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: buildPiece(context, piece),
     );
   }
 

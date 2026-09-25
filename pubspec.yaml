@@ -40,6 +40,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.2
   audioplayers: ^6.8.1
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -72,9 +73,6 @@ flutter:
     - assets/skins/night/background-mobile.png
     - assets/skins/night/background-desktop.png
     - assets/skins/night/pieces/
-    - assets/skins/maple/config.json
-    - assets/skins/maple/board.png
-    - assets/skins/maple/pieces/
     - assets/images/
     - assets/engines/
     - assets/sounds/

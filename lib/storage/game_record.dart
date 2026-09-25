@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
+
 /// The local play modes supported by the offline product.
 enum GamePlayMode { self, ai }
 
@@ -20,7 +22,8 @@ class GameMove {
     final to = json['to'];
     if (from is! int || to is! int) {
       throw const FormatException(
-          'A game move must contain integer from/to values.');
+        'A game move must contain integer from/to values.',
+      );
     }
     return GameMove(from: from, to: to);
   }
@@ -46,7 +49,14 @@ class GameRecord {
     this.result = GameResult.inProgress,
     this.redElapsedMs = 0,
     this.blackElapsedMs = 0,
-  }) : moves = List.unmodifiable(moves);
+    this.timeControlSeconds = 900,
+    AiStrength aiStrength = AiStrength.normal,
+    int? aiMaxDepth,
+    int? aiMaxThinkMs,
+  }) : aiStrength = aiStrength,
+       aiMaxDepth = aiMaxDepth ?? aiStrength.maxDepth,
+       aiMaxThinkMs = aiMaxThinkMs ?? aiStrength.maxThinkMs,
+       moves = List.unmodifiable(moves);
 
   final String id;
   final String initialFen;
@@ -57,6 +67,10 @@ class GameRecord {
   final DateTime updatedAt;
   final int redElapsedMs;
   final int blackElapsedMs;
+  final int timeControlSeconds;
+  final AiStrength aiStrength;
+  final int aiMaxDepth;
+  final int aiMaxThinkMs;
 
   GameRecord copyWith({
     String? id,
@@ -68,6 +82,10 @@ class GameRecord {
     DateTime? updatedAt,
     int? redElapsedMs,
     int? blackElapsedMs,
+    int? timeControlSeconds,
+    AiStrength? aiStrength,
+    int? aiMaxDepth,
+    int? aiMaxThinkMs,
   }) {
     return GameRecord(
       id: id ?? this.id,
@@ -79,20 +97,28 @@ class GameRecord {
       updatedAt: updatedAt ?? this.updatedAt,
       redElapsedMs: redElapsedMs ?? this.redElapsedMs,
       blackElapsedMs: blackElapsedMs ?? this.blackElapsedMs,
+      timeControlSeconds: timeControlSeconds ?? this.timeControlSeconds,
+      aiStrength: aiStrength ?? this.aiStrength,
+      aiMaxDepth: aiMaxDepth ?? this.aiMaxDepth,
+      aiMaxThinkMs: aiMaxThinkMs ?? this.aiMaxThinkMs,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'initialFen': initialFen,
-        'moves': moves.map((move) => move.toJson()).toList(),
-        'mode': mode.name,
-        'result': result.name,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        'updatedAt': updatedAt.toUtc().toIso8601String(),
-        'redElapsedMs': redElapsedMs,
-        'blackElapsedMs': blackElapsedMs,
-      };
+    'id': id,
+    'initialFen': initialFen,
+    'moves': moves.map((move) => move.toJson()).toList(),
+    'mode': mode.name,
+    'result': result.name,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+    'redElapsedMs': redElapsedMs,
+    'blackElapsedMs': blackElapsedMs,
+    'timeControlSeconds': timeControlSeconds,
+    'aiStrength': aiStrength.name,
+    'aiMaxDepth': aiMaxDepth,
+    'aiMaxThinkMs': aiMaxThinkMs,
+  };
 
   String encode() => jsonEncode(toJson());
 
@@ -104,6 +130,14 @@ class GameRecord {
     final result = _enumFromName(GameResult.values, json['result']);
     final createdAtValue = json['createdAt'];
     final updatedAtValue = json['updatedAt'];
+    final timeControlSeconds = json['timeControlSeconds'] ?? 0;
+    final aiStrengthValue = json['aiStrength'];
+    if (aiStrengthValue != null && aiStrengthValue is! String) {
+      throw const FormatException('Invalid AI strength.');
+    }
+    final aiStrength = AiStrength.fromName(aiStrengthValue as String?);
+    final aiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
+    final aiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
 
     if (id is! String ||
         id.isEmpty ||
@@ -112,7 +146,15 @@ class GameRecord {
         mode == null ||
         result == null ||
         createdAtValue is! String ||
-        updatedAtValue is! String) {
+        updatedAtValue is! String ||
+        timeControlSeconds is! int ||
+        timeControlSeconds < 0 ||
+        aiMaxDepth is! int ||
+        aiMaxDepth < 1 ||
+        aiMaxDepth > 64 ||
+        aiMaxThinkMs is! int ||
+        aiMaxThinkMs < 100 ||
+        aiMaxThinkMs > 10000) {
       throw const FormatException('Invalid game record.');
     }
     final createdAt = DateTime.tryParse(createdAtValue);
@@ -139,6 +181,10 @@ class GameRecord {
       updatedAt: updatedAt.toUtc(),
       redElapsedMs: _intValue(json['redElapsedMs']),
       blackElapsedMs: _intValue(json['blackElapsedMs']),
+      timeControlSeconds: timeControlSeconds,
+      aiStrength: aiStrength,
+      aiMaxDepth: aiMaxDepth,
+      aiMaxThinkMs: aiMaxThinkMs,
     );
   }
 

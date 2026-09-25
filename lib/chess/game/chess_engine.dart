@@ -4,6 +4,8 @@ import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter_cchess/engine/xqlite/search.dart';
 
+import 'ai_strength.dart';
+
 class _Request<T> {
   static int incrementalId = 1;
 
@@ -43,6 +45,14 @@ class _PendingResponse<T> {
 }
 
 abstract class ChessEnginePort {
+  Future<void> setOpeningBook(Iterable<List<int>> lines);
+
+  Future<void> setStrength(
+    AiStrength strength, {
+    int? maxDepth,
+    int? maxThinkMs,
+  });
+
   Future<void> restore(Iterable<int> moves);
 
   Future<int> makeMove(int mv);
@@ -62,14 +72,29 @@ class ChessEngine implements ChessEnginePort {
   static void _engineHandler(SendPort sendPort) {
     final XqwlSearch search = XqwlSearch();
     final ReceivePort recvPort = ReceivePort();
+    var strength = AiStrength.normal;
+    var maxDepth = strength.maxDepth;
+    var maxThinkMs = strength.maxThinkMs;
 
     dynamic methodHandler(String method, dynamic params) {
       switch (method) {
+        case 'board.setStrength':
+          final settings = Map<String, Object?>.from(params as Map);
+          strength = AiStrength.fromName(settings['strength'] as String?);
+          maxDepth = settings['maxDepth'] as int? ?? strength.maxDepth;
+          maxThinkMs = settings['maxThinkMs'] as int? ?? strength.maxThinkMs;
+          break;
+        case 'board.setOpeningBook':
+          final lines = (params as Iterable).map(
+            (line) => List<int>.from(line as Iterable),
+          );
+          search.loadBook(lines);
+          break;
         case 'board.requestMove':
-          search.searchMain();
+          search.searchMain(maxDepth: maxDepth, maxThinkMs: maxThinkMs);
           return search.mvResult;
         case 'board.requestAndMakeMove':
-          search.searchMain();
+          search.searchMain(maxDepth: maxDepth, maxThinkMs: maxThinkMs);
           search.pos.makeMove(search.mvResult);
           return search.mvResult;
         case 'board.makeMove':
@@ -80,7 +105,7 @@ class ChessEngine implements ChessEnginePort {
           if (!search.pos.makeMove(mv)) {
             throw Exception('king is checked');
           }
-          search.searchMain();
+          search.searchMain(maxDepth: maxDepth, maxThinkMs: maxThinkMs);
           search.pos.makeMove(search.mvResult);
           return search.mvResult;
         case 'board.reset':
@@ -183,6 +208,27 @@ class ChessEngine implements ChessEnginePort {
     pendingResponseMap[request.id] = pendingRes;
     sendPort.send(request);
     return await pendingRes.future;
+  }
+
+  @override
+  Future<void> setOpeningBook(Iterable<List<int>> lines) async {
+    await invokeMethod(
+      'board.setOpeningBook',
+      lines.map((line) => List<int>.from(line)).toList(growable: false),
+    );
+  }
+
+  @override
+  Future<void> setStrength(
+    AiStrength strength, {
+    int? maxDepth,
+    int? maxThinkMs,
+  }) async {
+    await invokeMethod('board.setStrength', {
+      'strength': strength.name,
+      'maxDepth': maxDepth ?? strength.maxDepth,
+      'maxThinkMs': maxThinkMs ?? strength.maxThinkMs,
+    });
   }
 
   @override

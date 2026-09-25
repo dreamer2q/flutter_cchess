@@ -112,11 +112,11 @@ void main() {
     }
   });
 
-  test('maple skin matches the reference-driven asset contract', () async {
-    final source = await File('assets/skins/maple/config.json').readAsString();
+  test('night skin matches the anchor-driven asset contract', () async {
+    final source = await File('assets/skins/night/config.json').readAsString();
     final skin = BoardSkin.fromJson(jsonDecode(source) as Map<String, dynamic>);
 
-    expect(skin.id, 'light-maple');
+    expect(skin.id, 'night-walnut');
     expect(skin.boardSize, const Size(900, 1000));
     expect(skin.anchors.topLeft, const Offset(50, 50));
     expect(skin.anchors.bottomRight, const Offset(850, 950));
@@ -140,7 +140,6 @@ void main() {
     expect(catalog.configAssets, [
       'assets/skins/woods/config.json',
       'assets/skins/night/config.json',
-      'assets/skins/maple/config.json',
     ]);
   });
 }

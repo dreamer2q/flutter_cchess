@@ -1,3 +1,4 @@
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
 import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -19,15 +20,21 @@ void main() {
       musicEnabled: false,
       hapticsEnabled: false,
       motionPreference: MotionPreference.reduced,
+      aiStrength: AiStrength.hard,
+      aiMaxDepth: 12,
+      aiMaxThinkMs: 3200,
     );
 
     expect(settings.toJson(), <String, Object>{
-      'schemaVersion': 2,
+      'schemaVersion': 3,
       'themeConfigAsset': 'assets/skins/night/config.json',
       'soundEnabled': false,
       'musicEnabled': false,
       'hapticsEnabled': false,
       'motionPreference': 'reduced',
+      'aiStrength': 'hard',
+      'aiMaxDepth': 12,
+      'aiMaxThinkMs': 3200,
     });
     expect(GameSettings.decode(settings.encode()), settings);
   });
@@ -42,9 +49,23 @@ void main() {
     expect(settings.musicEnabled, isFalse);
     expect(settings.themeConfigAsset, GameSettings.defaultThemeConfigAsset);
     expect(settings.motionPreference, MotionPreference.system);
+    expect(settings.aiStrength, AiStrength.normal);
+    expect(settings.aiMaxDepth, AiStrength.normal.maxDepth);
+    expect(settings.aiMaxThinkMs, AiStrength.normal.maxThinkMs);
   });
 
-  test('migrates the old default theme without disabling theme switching', () {
+  test('migrates version 2 preferences with default AI parameters', () {
+    final settings = GameSettings.fromJson(<String, dynamic>{
+      'schemaVersion': 2,
+      'aiStrength': 'hard',
+    });
+
+    expect(settings.aiStrength, AiStrength.hard);
+    expect(settings.aiMaxDepth, AiStrength.hard.maxDepth);
+    expect(settings.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
+  });
+
+  test('falls back when stored theme assets have been removed', () {
     final legacy = GameSettings.fromJson(<String, dynamic>{
       'schemaVersion': 1,
       'themeConfigAsset': 'assets/skins/maple/config.json',
@@ -55,12 +76,15 @@ void main() {
       'schemaVersion': 2,
       'themeConfigAsset': 'assets/skins/maple/config.json',
     });
-    expect(selectedMaple.themeConfigAsset, 'assets/skins/maple/config.json');
+    expect(
+      selectedMaple.themeConfigAsset,
+      GameSettings.defaultThemeConfigAsset,
+    );
   });
 
   test('rejects malformed and unsupported settings', () {
     expect(
-      () => GameSettings.fromJson(<String, dynamic>{'schemaVersion': 3}),
+      () => GameSettings.fromJson(<String, dynamic>{'schemaVersion': 4}),
       throwsFormatException,
     );
     expect(

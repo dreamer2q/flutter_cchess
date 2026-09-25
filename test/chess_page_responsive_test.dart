@@ -1,8 +1,15 @@
+import 'dart:convert';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/chess/view/chess_page.dart';
 import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
+import 'package:flutter_cchess/chess/game/ai_strength.dart';
+import 'package:flutter_cchess/chess/view/new_chess_page.dart';
 import 'package:flutter_cchess/main.dart';
 import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
@@ -76,12 +83,181 @@ void main() {
     );
   });
 
+  testWidgets('selection uses centered corners without a pointer focus ring', (
+    tester,
+  ) async {
+    await setViewport(tester, const Size(390, 844));
+    await openLocalGame(tester);
+
+    final boardRect = tester.getRect(
+      find.image(const AssetImage('assets/skins/woods/board.jpg')),
+    );
+    Offset intersection(int x, int y) => Offset(
+      boardRect.left + (32.5 + x * 57) * boardRect.width / 521,
+      boardRect.top + (31.5 + y * 57) * boardRect.height / 577,
+    );
+
+    await tester.tapAt(intersection(0, 9));
+    await tester.pump();
+    expect(find.byType(BoardCornerMarker), findsOneWidget);
+    expect(find.byKey(const ValueKey('board-keyboard-focus')), findsNothing);
+    expect(
+      (tester.getCenter(find.byType(BoardCornerMarker)) - intersection(0, 9))
+          .distance,
+      lessThan(0.1),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(find.byType(BoardCornerMarker), findsNWidgets(2));
+    expect(
+      (tester.getCenter(find.byKey(const ValueKey('board-keyboard-focus'))) -
+              intersection(1, 9))
+          .distance,
+      lessThan(0.1),
+    );
+  });
+
   testWidgets('compact mobile viewport does not overflow', (tester) async {
     await setViewport(tester, const Size(320, 640));
     await openLocalGame(tester);
 
     expect(find.byType(ChessBoard), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'desktop settings use a split view and apply themes immediately',
+    (tester) async {
+      await setViewport(tester, const Size(1200, 800));
+      await openLocalGame(tester);
+
+      await tester.tap(find.byTooltip('设置'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GameSettingsPage), findsOneWidget);
+      expect(find.text('偏好设置'), findsOneWidget);
+      expect(find.text('棋盘外观'), findsOneWidget);
+      await tester.tap(find.text('夜间胡桃木'));
+      await tester.pumpAndSettle();
+      expect(
+        find.image(const AssetImage('assets/skins/night/board.png')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('声音与触觉'));
+      await tester.pumpAndSettle();
+      expect(find.text('对局反馈'), findsOneWidget);
+      expect(find.text('触觉反馈'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('new game uses selected time and AI strength', (tester) async {
+    await setViewport(tester, const Size(1200, 800));
+    SharedPreferences.setMockInitialValues({
+      SharedPreferencesGameSettingsRepository.storageKey: const GameSettings(
+        soundEnabled: false,
+      ).encode(),
+    });
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15 分钟'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('5 分钟').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            find.byType(DropdownButtonFormField<int>),
+          )
+          .initialValue,
+      300,
+    );
+    await tester.tap(find.text('普通'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('较强').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('人机对局'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<ChessPage>(find.byType(ChessPage)).timeControlSeconds,
+      300,
+    );
+    expect(
+      tester.widget<ChessPage>(find.byType(ChessPage)).aiStrength,
+      AiStrength.hard,
+    );
+
+    final bloc = BlocProvider.of<ChessBloc>(
+      tester.element(find.byType(ChessBoard)),
+    );
+    expect(bloc.state.timeControlSeconds, 300);
+    expect(bloc.state.aiStrength, AiStrength.hard);
+    expect(find.text('05:00'), findsNWidgets(2));
+  });
+
+  testWidgets('notation file opens a local study game', (tester) async {
+    await setViewport(tester, const Size(1200, 800));
+    SharedPreferences.setMockInitialValues({
+      SharedPreferencesGameSettingsRepository.storageKey: const GameSettings(
+        soundEnabled: false,
+      ).encode(),
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NewChessPage(
+          pickNotationFile: () async => XFile.fromData(
+            Uint8List.fromList(utf8.encode('1. h2e2 h7e7 *')),
+            name: 'study.pgn',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导入棋谱'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChessBoard), findsOneWidget);
+    final bloc = BlocProvider.of<ChessBloc>(
+      tester.element(find.byType(ChessBoard)),
+    );
+    expect(bloc.state.board.lastMoves, hasLength(2));
+    expect(bloc.state.timeControlSeconds, 0);
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      (await SharedPreferencesGameRepository(preferences).getCurrent())?.moves,
+      hasLength(2),
+    );
+  });
+
+  testWidgets('invalid notation does not overwrite local storage', (
+    tester,
+  ) async {
+    await setViewport(tester, const Size(1200, 800));
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NewChessPage(
+          pickNotationFile: () async => XFile.fromData(
+            Uint8List.fromList(utf8.encode('1. h2e2 h2e2')),
+            name: 'invalid.pgn',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导入棋谱'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(ChessBoard), findsNothing);
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      await SharedPreferencesGameRepository(preferences).getCurrent(),
+      isNull,
+    );
   });
 
   testWidgets('desktop game exposes the inspector beside the board', (
