@@ -1,7 +1,7 @@
 name: Test and build Android, iOS and macOS apps
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
     types:
@@ -143,3 +143,77 @@ jobs:
           path: build/macos/flutter_cchess-macos.zip
           if-no-files-found: error
           retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    if: github.event.pull_request.merged == true
+    needs: [ai-regression, android, ios, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out merge commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Download Android APK
+        uses: actions/download-artifact@v7
+        with:
+          name: android-apk
+          path: release/android
+
+      - name: Download iOS app
+        uses: actions/download-artifact@v7
+        with:
+          name: ios-unsigned-app
+          path: release/ios
+
+      - name: Download macOS app
+        uses: actions/download-artifact@v7
+        with:
+          name: macos-app
+          path: release/macos
+
+      - name: Prepare release assets and metadata
+        id: release
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          version="$(sed -n 's/^version: *//p' pubspec.yaml | head -n 1)"
+          if [[ -z "$version" ]]; then
+            echo "Could not read the app version from pubspec.yaml" >&2
+            exit 1
+          fi
+          tag_version="${version/+/-build-}"
+          mkdir -p release/assets
+          cp release/android/app-release.apk release/assets/flutter-cchess-android.apk
+          cp release/ios/Runner-unsigned.zip release/assets/flutter-cchess-ios-unsigned.zip
+          cp release/macos/flutter_cchess-macos.zip release/assets/flutter-cchess-macos-unsigned.zip
+          printf 'tag=v%s-pr%s\n' "$tag_version" "$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          printf 'title=v%s (PR #%s)\n' "$version" "$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.release.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release.outputs.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          assets=(
+            release/assets/flutter-cchess-android.apk
+            release/assets/flutter-cchess-ios-unsigned.zip
+            release/assets/flutter-cchess-macos-unsigned.zip
+          )
+          notes="Automated build for merged PR #${PR_NUMBER} at ${MERGE_SHA}. The iOS and macOS packages are unsigned."
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG_NAME" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$MERGE_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes "$notes" \
+              --prerelease
+          fi
