@@ -109,8 +109,8 @@ class GameSettings {
       throw const FormatException('Invalid AI strength.');
     }
     final aiStrength = AiStrength.fromName(strengthValue as String?);
-    final aiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
-    final aiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
+    final storedAiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
+    final storedAiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
 
     if (themeConfigAsset is! String ||
         themeConfigAsset.isEmpty ||
@@ -120,14 +120,25 @@ class GameSettings {
         motionPreference == null) {
       throw const FormatException('Invalid game settings.');
     }
-    if (aiMaxDepth is! int ||
-        aiMaxDepth < 1 ||
-        aiMaxDepth > 64 ||
-        aiMaxThinkMs is! int ||
-        aiMaxThinkMs < 100 ||
-        aiMaxThinkMs > 10000) {
+    if (storedAiMaxDepth is! int ||
+        storedAiMaxDepth < 1 ||
+        storedAiMaxDepth > 64 ||
+        storedAiMaxThinkMs is! int ||
+        storedAiMaxThinkMs < 100 ||
+        storedAiMaxThinkMs > 10000) {
       throw const FormatException('Invalid AI settings.');
     }
+    final legacyHardDefault = AiStrength.isLegacyHardDefault(
+      strength: aiStrength,
+      maxDepth: storedAiMaxDepth,
+      maxThinkMs: storedAiMaxThinkMs,
+    );
+    final aiMaxDepth = legacyHardDefault
+        ? aiStrength.maxDepth
+        : AiStrength.clampDepth(storedAiMaxDepth);
+    final aiMaxThinkMs = legacyHardDefault
+        ? aiStrength.maxThinkMs
+        : AiStrength.clampThinkMs(storedAiMaxThinkMs);
 
     return GameSettings(
       themeConfigAsset: themeConfigAsset,

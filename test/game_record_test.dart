@@ -17,8 +17,8 @@ void main() {
     redElapsedMs: 1200,
     blackElapsedMs: 800,
     aiStrength: AiStrength.hard,
-    aiMaxDepth: 11,
-    aiMaxThinkMs: 2800,
+    aiMaxDepth: 7,
+    aiMaxThinkMs: 1900,
   );
 
   test('round trips a game record through JSON', () {
@@ -36,6 +36,16 @@ void main() {
     final legacy = record.toJson()
       ..remove('aiMaxDepth')
       ..remove('aiMaxThinkMs');
+
+    final migrated = GameRecord.fromJson(legacy);
+    expect(migrated.aiMaxDepth, AiStrength.hard.maxDepth);
+    expect(migrated.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
+  });
+
+  test('old strong-game settings are migrated to a bounded search budget', () {
+    final legacy = record.toJson()
+      ..['aiMaxDepth'] = 64
+      ..['aiMaxThinkMs'] = 5000;
 
     final migrated = GameRecord.fromJson(legacy);
     expect(migrated.aiMaxDepth, AiStrength.hard.maxDepth);

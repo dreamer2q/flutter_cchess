@@ -136,8 +136,8 @@ class GameRecord {
       throw const FormatException('Invalid AI strength.');
     }
     final aiStrength = AiStrength.fromName(aiStrengthValue as String?);
-    final aiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
-    final aiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
+    final storedAiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
+    final storedAiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
 
     if (id is! String ||
         id.isEmpty ||
@@ -149,14 +149,25 @@ class GameRecord {
         updatedAtValue is! String ||
         timeControlSeconds is! int ||
         timeControlSeconds < 0 ||
-        aiMaxDepth is! int ||
-        aiMaxDepth < 1 ||
-        aiMaxDepth > 64 ||
-        aiMaxThinkMs is! int ||
-        aiMaxThinkMs < 100 ||
-        aiMaxThinkMs > 10000) {
+        storedAiMaxDepth is! int ||
+        storedAiMaxDepth < 1 ||
+        storedAiMaxDepth > 64 ||
+        storedAiMaxThinkMs is! int ||
+        storedAiMaxThinkMs < 100 ||
+        storedAiMaxThinkMs > 10000) {
       throw const FormatException('Invalid game record.');
     }
+    final legacyHardDefault = AiStrength.isLegacyHardDefault(
+      strength: aiStrength,
+      maxDepth: storedAiMaxDepth,
+      maxThinkMs: storedAiMaxThinkMs,
+    );
+    final aiMaxDepth = legacyHardDefault
+        ? aiStrength.maxDepth
+        : AiStrength.clampDepth(storedAiMaxDepth);
+    final aiMaxThinkMs = legacyHardDefault
+        ? aiStrength.maxThinkMs
+        : AiStrength.clampThinkMs(storedAiMaxThinkMs);
     final createdAt = DateTime.tryParse(createdAtValue);
     final updatedAt = DateTime.tryParse(updatedAtValue);
     if (createdAt == null || updatedAt == null) {

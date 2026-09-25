@@ -84,8 +84,8 @@ void main() {
       ChessEventInitialized(
         initialBoard: FenUtil.parse(initialFenString),
         aiStrength: AiStrength.hard,
-        aiMaxDepth: 11,
-        aiMaxThinkMs: 2800,
+        aiMaxDepth: 7,
+        aiMaxThinkMs: 1900,
         openingBookLines: const [
           [1, 2],
           [3, 4],
@@ -94,8 +94,8 @@ void main() {
     );
     await _waitFor(bloc, (s) => s.phase == GamePhase.playerTurn);
     expect(engine.strength, AiStrength.hard);
-    expect(engine.maxDepth, 11);
-    expect(engine.maxThinkMs, 2800);
+    expect(engine.maxDepth, 7);
+    expect(engine.maxThinkMs, 1900);
     expect(engine.openingBookLines, [
       [1, 2],
       [3, 4],

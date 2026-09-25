@@ -210,6 +210,8 @@ void main() {
     );
     expect(bloc.state.timeControlSeconds, 300);
     expect(bloc.state.aiStrength, AiStrength.hard);
+    expect(bloc.state.aiMaxDepth, AiStrength.hard.maxDepth);
+    expect(bloc.state.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
     expect(find.text('05:00'), findsNWidgets(2));
   });
 
