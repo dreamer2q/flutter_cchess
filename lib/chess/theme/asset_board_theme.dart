@@ -36,12 +36,44 @@ class AssetBoardTheme extends BoardTheme {
 
   @override
   Widget buildBoard(BuildContext context) {
+    final riverStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+      color: const Color(0xFF92734C),
+      fontSize: 30,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 1,
+    );
     return buildBoardSurface(
-      Image.asset(
-        boardAsset,
+      SizedBox(
         width: boardSize.width,
         height: boardSize.height,
-        fit: BoxFit.fill,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(boardAsset, fit: BoxFit.fill),
+            if (skin.riverLabels['left'] case final left?)
+              Positioned(
+                left: boardSize.width * .22,
+                top: boardSize.height / 2 - 18,
+                width: boardSize.width * .24,
+                child: Text(
+                  left,
+                  textAlign: TextAlign.center,
+                  style: riverStyle,
+                ),
+              ),
+            if (skin.riverLabels['right'] case final right?)
+              Positioned(
+                right: boardSize.width * .22,
+                top: boardSize.height / 2 - 18,
+                width: boardSize.width * .24,
+                child: Text(
+                  right,
+                  textAlign: TextAlign.center,
+                  style: riverStyle,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
