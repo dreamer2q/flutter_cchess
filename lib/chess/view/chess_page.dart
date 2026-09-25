@@ -718,11 +718,15 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
   }
 
   Future<void> _showSettings() async {
+    final themeBloc = context.read<ThemeBloc>();
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => GameSettingsPage(
-          initialSettings: _settings,
-          onSettingsChanged: _saveSettings,
+        builder: (_) => BlocProvider.value(
+          value: themeBloc,
+          child: GameSettingsPage(
+            initialSettings: _settings,
+            onSettingsChanged: _saveSettings,
+          ),
         ),
       ),
     );

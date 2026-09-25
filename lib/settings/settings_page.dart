@@ -212,7 +212,9 @@ class _SettingsDetail extends StatelessWidget {
       _SettingsSection.motion => _motion(context),
     };
     final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: compact
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.stretch,
       children: [
         Text(section.title, style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 5),
@@ -228,15 +230,9 @@ class _SettingsDetail extends StatelessWidget {
     );
 
     if (compact) return content;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(40, 32, 40, 40),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: content,
-        ),
-      ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(40, 32, 40, 40),
+      child: SizedBox(width: double.infinity, child: content),
     );
   }
 
@@ -474,7 +470,7 @@ class _SettingsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 2, bottom: 9),
@@ -485,12 +481,14 @@ class _SettingsGroup extends StatelessWidget {
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0xEFFFFFFF),
+        Material(
+          key: ValueKey('settings-group-$title'),
+          color: const Color(0xEFFFFFFF),
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0x26717F7B)),
+            side: const BorderSide(color: Color(0x26717F7B)),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Column(mainAxisSize: MainAxisSize.min, children: children),
         ),
       ],

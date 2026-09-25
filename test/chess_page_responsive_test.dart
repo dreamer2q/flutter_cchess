@@ -13,6 +13,7 @@ import 'package:flutter_cchess/chess/view/new_chess_page.dart';
 import 'package:flutter_cchess/main.dart';
 import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
+import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 import 'package:flutter_cchess/utils/fen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -137,14 +138,28 @@ void main() {
 
       expect(find.byType(GameSettingsPage), findsOneWidget);
       expect(find.text('偏好设置'), findsOneWidget);
-      expect(find.text('棋盘外观'), findsOneWidget);
+      expect(find.text('棋盘外观'), findsNWidgets(2));
+      expect(
+        tester.getRect(find.byKey(const ValueKey('settings-group-棋盘主题'))).width,
+        greaterThan(800),
+      );
       await tester.tap(find.text('夜间胡桃木'));
+      await tester.pumpAndSettle();
+      expect(
+        BlocProvider.of<ThemeBloc>(
+          tester.element(find.byType(GameSettingsPage)),
+        ).state.theme.boardAsset,
+        'assets/skins/night/board.png',
+      );
+      await tester.tap(find.byTooltip('返回对局'));
       await tester.pumpAndSettle();
       expect(
         find.image(const AssetImage('assets/skins/night/board.png')),
         findsOneWidget,
       );
 
+      await tester.tap(find.byTooltip('设置'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('声音与触觉'));
       await tester.pumpAndSettle();
       expect(find.text('对局反馈'), findsOneWidget);
