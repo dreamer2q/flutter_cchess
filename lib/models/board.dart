@@ -76,6 +76,10 @@ class Board extends Equatable {
       .map<MovePos>((v) => MovePos.mv(v.mv))
       .toBuiltList();
 
+  /// Static engine evaluation from Red's perspective, excluding the side-to-
+  /// move bonus so the displayed score does not flip after every turn.
+  int get staticEvaluationForRed => innerBoard.vlWhite - innerBoard.vlBlack;
+
   List<MovePos> getMoves([int sq = 0]) {
     List<int> mvs = [];
     innerBoard.generateMoves(mvs);

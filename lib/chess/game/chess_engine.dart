@@ -44,6 +44,13 @@ class _PendingResponse<T> {
   Future<T> get future => completer.future;
 }
 
+class EnginePositionEvaluation {
+  const EnginePositionEvaluation({required this.score, required this.depth});
+
+  final int score;
+  final int depth;
+}
+
 abstract class ChessEnginePort {
   Future<void> setOpeningBook(Iterable<List<int>> lines);
 
@@ -58,6 +65,13 @@ abstract class ChessEnginePort {
   Future<int> makeMove(int mv);
 
   Future<int> requestMove();
+
+  Future<EnginePositionEvaluation> evaluatePosition({
+    required List<int> squares,
+    required int sideToMove,
+    required int maxDepth,
+    required int maxThinkMs,
+  });
 
   /// Searches the current position and commits the returned move in the
   /// engine. Used when restoring a game that stopped on the computer turn.
@@ -97,6 +111,21 @@ class ChessEngine implements ChessEnginePort {
         case 'board.requestMove':
           search.searchMain(maxDepth: maxDepth, maxThinkMs: maxThinkMs);
           return search.mvResult;
+        case 'board.evaluatePosition':
+          final position = Map<String, Object?>.from(params as Map);
+          final squares = List<int>.from(position['squares'] as Iterable);
+          search.pos.clearBoard();
+          for (var square = 0; square < squares.length; square++) {
+            final piece = squares[square];
+            if (piece != 0) search.pos.addPiece(square, piece);
+          }
+          if (position['sideToMove'] == 1) search.pos.changeSide();
+          search.pos.setIrrev();
+          final score = search.evaluatePosition(
+            maxDepth: AiStrength.clampDepth(position['maxDepth'] as int),
+            maxThinkMs: AiStrength.clampThinkMs(position['maxThinkMs'] as int),
+          );
+          return {'score': score, 'depth': search.completedDepth};
         case 'board.requestAndMakeMove':
           search.searchMain(maxDepth: maxDepth, maxThinkMs: maxThinkMs);
           search.pos.makeMove(search.mvResult);
@@ -248,6 +277,26 @@ class ChessEngine implements ChessEnginePort {
   @override
   Future<int> requestMove() async {
     return await invokeMethod('board.requestMove', null);
+  }
+
+  @override
+  Future<EnginePositionEvaluation> evaluatePosition({
+    required List<int> squares,
+    required int sideToMove,
+    required int maxDepth,
+    required int maxThinkMs,
+  }) async {
+    final result = await invokeMethod('board.evaluatePosition', {
+      'squares': squares,
+      'sideToMove': sideToMove,
+      'maxDepth': maxDepth,
+      'maxThinkMs': maxThinkMs,
+    });
+    final values = Map<String, int>.from(result as Map);
+    return EnginePositionEvaluation(
+      score: values['score']!,
+      depth: values['depth']!,
+    );
   }
 
   @override

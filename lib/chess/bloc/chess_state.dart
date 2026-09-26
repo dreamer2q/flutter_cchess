@@ -87,6 +87,10 @@ class ChessState extends Equatable {
     AiStrength aiStrength = AiStrength.normal,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
+    this.aiEvaluationForRed,
+    this.aiEvaluationDepth,
+    this.isEvaluating = false,
+    this.evaluationFailed = false,
   }) : selectedMoves = selectedMoves ?? BuiltList<MovePos>(),
        hintMoves = hintMoves ?? BuiltList<MovePos>(),
        presentations = presentations ?? BuiltList<PresentationEffect>(),
@@ -115,6 +119,10 @@ class ChessState extends Equatable {
   final AiStrength aiStrength;
   final int aiMaxDepth;
   final int aiMaxThinkMs;
+  final int? aiEvaluationForRed;
+  final int? aiEvaluationDepth;
+  final bool isEvaluating;
+  final bool evaluationFailed;
 
   int remainingSeconds(PlaySide side) {
     if (timeControlSeconds == 0) return 0;
@@ -140,6 +148,11 @@ class ChessState extends Equatable {
       phase == GamePhase.playerTurn &&
       presentations.isEmpty &&
       board.isTurn(playSide);
+  bool get canEvaluate =>
+      !isEvaluating &&
+      phase != GamePhase.loading &&
+      phase != GamePhase.aiThinking &&
+      phase != GamePhase.failure;
   bool get canPause =>
       phase != GamePhase.loading &&
       phase != GamePhase.paused &&
@@ -176,11 +189,16 @@ class ChessState extends Equatable {
     AiStrength? aiStrength,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
+    int? aiEvaluationForRed,
+    int? aiEvaluationDepth,
+    bool? isEvaluating,
+    bool? evaluationFailed,
     bool clearSelected = false,
     bool clearHintMoves = false,
     bool clearLastMove = false,
     bool clearResult = false,
     bool clearFailure = false,
+    bool clearAiEvaluation = false,
   }) {
     return ChessState(
       board: board ?? this.board,
@@ -210,6 +228,18 @@ class ChessState extends Equatable {
       aiStrength: aiStrength ?? this.aiStrength,
       aiMaxDepth: aiMaxDepth ?? this.aiMaxDepth,
       aiMaxThinkMs: aiMaxThinkMs ?? this.aiMaxThinkMs,
+      aiEvaluationForRed: clearAiEvaluation
+          ? null
+          : aiEvaluationForRed ?? this.aiEvaluationForRed,
+      aiEvaluationDepth: clearAiEvaluation
+          ? null
+          : aiEvaluationDepth ?? this.aiEvaluationDepth,
+      isEvaluating: clearAiEvaluation
+          ? false
+          : isEvaluating ?? this.isEvaluating,
+      evaluationFailed: clearAiEvaluation
+          ? false
+          : evaluationFailed ?? this.evaluationFailed,
     );
   }
 
@@ -236,5 +266,9 @@ class ChessState extends Equatable {
     aiStrength,
     aiMaxDepth,
     aiMaxThinkMs,
+    aiEvaluationForRed,
+    aiEvaluationDepth,
+    isEvaluating,
+    evaluationFailed,
   ];
 }

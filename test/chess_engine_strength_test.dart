@@ -15,4 +15,20 @@ void main() {
 
     expect(FenUtil.parse(initialFenString).isMovable(move), isTrue);
   });
+
+  test('engine returns bounded position score and completed depth', () async {
+    final engine = ChessEngine();
+    addTearDown(engine.dispose);
+    final board = FenUtil.parse(initialFenString);
+
+    final evaluation = await engine.evaluatePosition(
+      squares: board.innerBoard.ucpcSquares,
+      sideToMove: board.innerBoard.sdPlayer,
+      maxDepth: 2,
+      maxThinkMs: 500,
+    );
+
+    expect(evaluation.score, isA<int>());
+    expect(evaluation.depth, inInclusiveRange(1, 2));
+  });
 }

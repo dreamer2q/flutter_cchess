@@ -99,6 +99,10 @@ class ChessEventGetHint extends ChessEvent {
   const ChessEventGetHint();
 }
 
+class ChessEventEvaluatePosition extends ChessEvent {
+  const ChessEventEvaluatePosition();
+}
+
 class ChessEventPause extends ChessEvent {
   const ChessEventPause();
 }
@@ -143,6 +147,25 @@ class _ChessEventHintResolved extends ChessEvent {
   final Object? error;
   @override
   List<Object?> get props => [generation, move, error];
+}
+
+class _ChessEventEvaluationResolved extends ChessEvent {
+  const _ChessEventEvaluationResolved({
+    required this.generation,
+    required this.board,
+    required this.score,
+    required this.depth,
+    this.error,
+  });
+
+  final int generation;
+  final Board board;
+  final int score;
+  final int depth;
+  final Object? error;
+
+  @override
+  List<Object?> get props => [generation, board, score, depth, error];
 }
 
 class _ChessEventPersistenceCompleted extends ChessEvent {
