@@ -40,6 +40,20 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> waitForThemeAsset(WidgetTester tester, String asset) async {
+    final bloc = BlocProvider.of<ThemeBloc>(
+      tester.element(find.byType(GameSettingsPage)),
+    );
+    for (
+      var frame = 0;
+      frame < 50 && bloc.state.theme.boardAsset != asset;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(bloc.state.theme.boardAsset, asset);
+  }
+
   testWidgets('mobile game keeps the board and primary commands visible', (
     tester,
   ) async {
@@ -51,6 +65,26 @@ void main() {
     expect(find.text('翻转'), findsOneWidget);
     expect(find.text('棋谱'), findsOneWidget);
     expect(find.text('红方 · 我'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('暖木经典'));
+    await tester.pumpAndSettle();
+    await waitForThemeAsset(tester, 'assets/skins/qqclassic/board.png');
+    expect(
+      BlocProvider.of<ThemeBloc>(
+        tester.element(find.byType(GameSettingsPage)),
+      ).state.theme.boardAsset,
+      'assets/skins/qqclassic/board.png',
+    );
+    await tester.tap(find.byTooltip('返回对局'));
+    await tester.pumpAndSettle();
+    expect(
+      find.image(const AssetImage('assets/skins/qqclassic/board.png')),
+      findsOneWidget,
+    );
+    expect(find.text('楚河'), findsOneWidget);
+    expect(find.text('汉界'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -145,6 +179,7 @@ void main() {
       );
       await tester.tap(find.text('夜间胡桃木'));
       await tester.pumpAndSettle();
+      await waitForThemeAsset(tester, 'assets/skins/night/board.png');
       expect(
         BlocProvider.of<ThemeBloc>(
           tester.element(find.byType(GameSettingsPage)),
@@ -155,6 +190,40 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.image(const AssetImage('assets/skins/night/board.png')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('设置'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SegmentedButton<String>>(
+              find.byType(SegmentedButton<String>),
+            )
+            .selected,
+        {'assets/skins/night/config.json'},
+      );
+      await tester.tap(find.text('暖木经典'));
+      await tester.pumpAndSettle();
+      await waitForThemeAsset(tester, 'assets/skins/qqclassic/board.png');
+      expect(
+        tester
+            .widget<SegmentedButton<String>>(
+              find.byType(SegmentedButton<String>),
+            )
+            .selected,
+        {'assets/skins/qqclassic/config.json'},
+      );
+      expect(
+        BlocProvider.of<ThemeBloc>(
+          tester.element(find.byType(GameSettingsPage)),
+        ).state.theme.boardAsset,
+        'assets/skins/qqclassic/board.png',
+      );
+      await tester.tap(find.byTooltip('返回对局'));
+      await tester.pumpAndSettle();
+      expect(
+        find.image(const AssetImage('assets/skins/qqclassic/board.png')),
         findsOneWidget,
       );
 

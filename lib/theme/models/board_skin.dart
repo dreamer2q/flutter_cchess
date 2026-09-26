@@ -44,6 +44,7 @@ class BoardSkin {
     required this.pieceSize,
     required this.redPieces,
     required this.blackPieces,
+    this.riverLabels = const <String, String>{},
     this.mobileBackground,
     this.desktopBackground,
   });
@@ -56,11 +57,12 @@ class BoardSkin {
   final double pieceSize;
   final Map<String, String> redPieces;
   final Map<String, String> blackPieces;
+  final Map<String, String> riverLabels;
   final String? mobileBackground;
   final String? desktopBackground;
 
   static Future<BoardSkin> load(String assetPath) async {
-    final source = await rootBundle.loadString(assetPath);
+    final source = await rootBundle.loadString(assetPath, cache: false);
     return BoardSkin.fromJson(jsonDecode(source) as Map<String, dynamic>);
   }
 
@@ -84,12 +86,17 @@ class BoardSkin {
         topLeft: _offset(anchors['topLeft'], 'board.anchors.topLeft'),
         topRight: _offset(anchors['topRight'], 'board.anchors.topRight'),
         bottomLeft: _offset(anchors['bottomLeft'], 'board.anchors.bottomLeft'),
-        bottomRight:
-            _offset(anchors['bottomRight'], 'board.anchors.bottomRight'),
+        bottomRight: _offset(
+          anchors['bottomRight'],
+          'board.anchors.bottomRight',
+        ),
       ),
       pieceSize: _number(json['pieceSize'], 'pieceSize'),
       redPieces: _stringMap(pieces['red'], 'pieces.red'),
       blackPieces: _stringMap(pieces['black'], 'pieces.black'),
+      riverLabels: json['riverLabels'] is Map
+          ? _stringMap(json['riverLabels'], 'riverLabels')
+          : const <String, String>{},
       mobileBackground: backgrounds['mobile'] as String?,
       desktopBackground: backgrounds['desktop'] as String?,
     );

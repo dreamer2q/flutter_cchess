@@ -1,0 +1,44 @@
+{
+  "id": "qqclassic-warm-wood",
+  "name": "暖木经典",
+  "board": {
+    "asset": "assets/skins/qqclassic/board.png",
+    "width": 628,
+    "height": 730,
+    "anchors": {
+      "topLeft": [44, 61],
+      "topRight": [585, 61],
+      "bottomLeft": [44, 668],
+      "bottomRight": [585, 668]
+    }
+  },
+  "pieceSize": 64,
+  "riverLabels": {
+    "left": "楚河",
+    "right": "汉界"
+  },
+  "pieces": {
+    "red": {
+      "k": "assets/skins/qqclassic/pieces/rk.png",
+      "a": "assets/skins/qqclassic/pieces/ra.png",
+      "b": "assets/skins/qqclassic/pieces/rb.png",
+      "n": "assets/skins/qqclassic/pieces/rn.png",
+      "r": "assets/skins/qqclassic/pieces/rr.png",
+      "c": "assets/skins/qqclassic/pieces/rc.png",
+      "p": "assets/skins/qqclassic/pieces/rp.png"
+    },
+    "black": {
+      "k": "assets/skins/qqclassic/pieces/bk.png",
+      "a": "assets/skins/qqclassic/pieces/ba.png",
+      "b": "assets/skins/qqclassic/pieces/bb.png",
+      "n": "assets/skins/qqclassic/pieces/bn.png",
+      "r": "assets/skins/qqclassic/pieces/br.png",
+      "c": "assets/skins/qqclassic/pieces/bc.png",
+      "p": "assets/skins/qqclassic/pieces/bp.png"
+    }
+  },
+  "backgrounds": {
+    "mobile": "assets/skins/qqclassic/background-mobile.jpg",
+    "desktop": "assets/skins/qqclassic/background-desktop.jpg"
+  }
+}

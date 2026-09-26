@@ -255,6 +255,11 @@ class _SettingsDetail extends StatelessWidget {
                 icon: Icon(Icons.dark_mode_outlined),
                 label: Text('夜间胡桃木'),
               ),
+              ButtonSegment(
+                value: 'assets/skins/qqclassic/config.json',
+                icon: Icon(Icons.palette_outlined),
+                label: Text('暖木经典'),
+              ),
             ],
             selected: {settings.themeConfigAsset},
             onSelectionChanged: (selection) =>

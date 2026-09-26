@@ -131,6 +131,32 @@ void main() {
     expect(runtimeAssets.every((asset) => File(asset).existsSync()), isTrue);
   });
 
+  test('warm wood skin keeps the licensed board and pieces modular', () async {
+    final source = await File(
+      'assets/skins/qqclassic/config.json',
+    ).readAsString();
+    final skin = BoardSkin.fromJson(jsonDecode(source) as Map<String, dynamic>);
+
+    expect(skin.id, 'qqclassic-warm-wood');
+    expect(skin.boardSize, const Size(628, 730));
+    expect(skin.anchors.topLeft, const Offset(44, 61));
+    expect(skin.anchors.bottomRight, const Offset(585, 668));
+    expect(skin.redPieces, hasLength(7));
+    expect(skin.blackPieces, hasLength(7));
+    expect(skin.riverLabels, {'left': '楚河', 'right': '汉界'});
+    expect(skin.pieceAsset(const ChessPiece(8)), endsWith('/rk.png'));
+    expect(skin.pieceAsset(const ChessPiece(16)), endsWith('/bk.png'));
+
+    final runtimeAssets = <String>{
+      skin.boardAsset,
+      ...skin.redPieces.values,
+      ...skin.blackPieces.values,
+      skin.mobileBackground!,
+      skin.desktopBackground!,
+    };
+    expect(runtimeAssets.every((asset) => File(asset).existsSync()), isTrue);
+  });
+
   test('skin catalog discovers themes without renderer changes', () async {
     final source = await File('assets/skins/catalog.json').readAsString();
     final catalog = BoardSkinCatalog.fromJson(
@@ -140,6 +166,7 @@ void main() {
     expect(catalog.configAssets, [
       'assets/skins/woods/config.json',
       'assets/skins/night/config.json',
+      'assets/skins/qqclassic/config.json',
     ]);
   });
 }

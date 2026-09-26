@@ -54,7 +54,7 @@ void main() {
     test('maps every cue to a bundled sound asset', () async {
       for (final cue in GameAudioCue.values) {
         expect(cue.assetPath, startsWith('sounds/'));
-        expect(cue.assetPath, endsWith('.wav'));
+        expect(cue.assetPath, anyOf(endsWith('.wav'), endsWith('.mp3')));
         final asset = await rootBundle.load('assets/${cue.assetPath}');
         expect(asset.lengthInBytes, greaterThan(0));
       }

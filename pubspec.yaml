@@ -68,6 +68,11 @@ flutter:
   assets:
     - assets/skins/catalog.json
     - assets/skins/woods/
+    - assets/skins/qqclassic/config.json
+    - assets/skins/qqclassic/board.png
+    - assets/skins/qqclassic/background-mobile.jpg
+    - assets/skins/qqclassic/background-desktop.jpg
+    - assets/skins/qqclassic/pieces/
     - assets/skins/night/config.json
     - assets/skins/night/board.png
     - assets/skins/night/background-mobile.png
@@ -76,6 +81,7 @@ flutter:
     - assets/images/
     - assets/engines/
     - assets/sounds/
+    - assets/sounds/qqclassic/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
