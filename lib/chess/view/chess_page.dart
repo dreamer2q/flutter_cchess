@@ -1049,24 +1049,40 @@ class _DesktopInspector extends StatelessWidget {
       children: [
         _PlayerPanel(side: PlaySide.black, state: state),
         const SizedBox(height: 12),
-        SegmentedButton<int>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(
-              value: 0,
-              icon: Icon(Icons.list_alt),
-              label: Text('棋谱'),
-            ),
-            ButtonSegment(value: 1, icon: Icon(Icons.tune), label: Text('局面')),
-          ],
-          selected: {tab},
-          onSelectionChanged: (selection) => onTabChanged(selection.first),
-        ),
-        const SizedBox(height: 10),
         Expanded(
-          child: tab == 0
-              ? _MoveHistory(state: state, embedded: true)
-              : _PositionSummary(state: state),
+          child: _GlassSurface(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                children: [
+                  SegmentedButton<int>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: 0,
+                        icon: Icon(Icons.list_alt),
+                        label: Text('棋谱'),
+                      ),
+                      ButtonSegment(
+                        value: 1,
+                        icon: Icon(Icons.tune),
+                        label: Text('局面'),
+                      ),
+                    ],
+                    selected: {tab},
+                    onSelectionChanged: (selection) =>
+                        onTabChanged(selection.first),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: tab == 0
+                        ? _MoveHistory(state: state, embedded: true)
+                        : _PositionSummary(state: state),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         _PlayerPanel(side: PlaySide.red, state: state),

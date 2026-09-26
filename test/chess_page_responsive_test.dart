@@ -355,6 +355,13 @@ void main() {
     expect(find.byType(ChessBoard), findsOneWidget);
     expect(find.text('局面'), findsOneWidget);
     expect(find.text('棋谱将在落子后显示'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.text('棋谱将在落子后显示'),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
