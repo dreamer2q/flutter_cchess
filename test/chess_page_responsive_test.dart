@@ -177,6 +177,16 @@ void main() {
         tester.getRect(find.byKey(const ValueKey('settings-group-棋盘主题'))).width,
         greaterThan(800),
       );
+      expect(
+        tester.getCenter(find.byType(SegmentedButton<String>)).dx,
+        closeTo(
+          tester
+              .getRect(find.byKey(const ValueKey('settings-group-棋盘主题')))
+              .center
+              .dx,
+          1,
+        ),
+      );
       await tester.tap(find.text('夜间胡桃木'));
       await tester.pumpAndSettle();
       await waitForThemeAsset(tester, 'assets/skins/night/board.png');

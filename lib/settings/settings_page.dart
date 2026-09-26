@@ -242,28 +242,31 @@ class _SettingsDetail extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: SegmentedButton<String>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                value: GameSettings.defaultThemeConfigAsset,
-                icon: Icon(Icons.grid_4x4),
-                label: Text('经典木纹'),
+          child: Center(
+            child: SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: GameSettings.defaultThemeConfigAsset,
+                  icon: Icon(Icons.grid_4x4),
+                  label: Text('经典木纹'),
+                ),
+                ButtonSegment(
+                  value: 'assets/skins/night/config.json',
+                  icon: Icon(Icons.dark_mode_outlined),
+                  label: Text('夜间胡桃木'),
+                ),
+                ButtonSegment(
+                  value: 'assets/skins/qqclassic/config.json',
+                  icon: Icon(Icons.palette_outlined),
+                  label: Text('暖木经典'),
+                ),
+              ],
+              selected: {settings.themeConfigAsset},
+              onSelectionChanged: (selection) => onUpdate(
+                settings.copyWith(themeConfigAsset: selection.first),
               ),
-              ButtonSegment(
-                value: 'assets/skins/night/config.json',
-                icon: Icon(Icons.dark_mode_outlined),
-                label: Text('夜间胡桃木'),
-              ),
-              ButtonSegment(
-                value: 'assets/skins/qqclassic/config.json',
-                icon: Icon(Icons.palette_outlined),
-                label: Text('暖木经典'),
-              ),
-            ],
-            selected: {settings.themeConfigAsset},
-            onSelectionChanged: (selection) =>
-                onUpdate(settings.copyWith(themeConfigAsset: selection.first)),
+            ),
           ),
         ),
       ],
