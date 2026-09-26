@@ -89,6 +89,9 @@ class ChessState extends Equatable {
     AiStrength? blackAiStrength,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
+    int? redAiMaxDepth,
+    int? blackAiMaxDepth,
+    this.aiVsAiStepDelayMs = 0,
   }) : selectedMoves = selectedMoves ?? BuiltList<MovePos>(),
        hintMoves = hintMoves ?? BuiltList<MovePos>(),
        presentations = presentations ?? BuiltList<PresentationEffect>(),
@@ -96,7 +99,10 @@ class ChessState extends Equatable {
        redAiStrength = redAiStrength ?? aiStrength,
        blackAiStrength = blackAiStrength ?? aiStrength,
        aiMaxDepth = aiMaxDepth ?? aiStrength.maxDepth,
-       aiMaxThinkMs = aiMaxThinkMs ?? aiStrength.maxThinkMs;
+       aiMaxThinkMs = aiMaxThinkMs ?? aiStrength.maxThinkMs,
+       redAiMaxDepth = redAiMaxDepth ?? (redAiStrength ?? aiStrength).maxDepth,
+       blackAiMaxDepth =
+           blackAiMaxDepth ?? (blackAiStrength ?? aiStrength).maxDepth;
 
   final Board board;
   final PiecePair? selected;
@@ -121,6 +127,9 @@ class ChessState extends Equatable {
   final AiStrength blackAiStrength;
   final int aiMaxDepth;
   final int aiMaxThinkMs;
+  final int redAiMaxDepth;
+  final int blackAiMaxDepth;
+  final int aiVsAiStepDelayMs;
 
   int remainingSeconds(PlaySide side) {
     if (timeControlSeconds == 0) return 0;
@@ -190,6 +199,9 @@ class ChessState extends Equatable {
     AiStrength? blackAiStrength,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
+    int? redAiMaxDepth,
+    int? blackAiMaxDepth,
+    int? aiVsAiStepDelayMs,
     bool clearSelected = false,
     bool clearHintMoves = false,
     bool clearLastMove = false,
@@ -226,6 +238,9 @@ class ChessState extends Equatable {
       blackAiStrength: blackAiStrength ?? this.blackAiStrength,
       aiMaxDepth: aiMaxDepth ?? this.aiMaxDepth,
       aiMaxThinkMs: aiMaxThinkMs ?? this.aiMaxThinkMs,
+      redAiMaxDepth: redAiMaxDepth ?? this.redAiMaxDepth,
+      blackAiMaxDepth: blackAiMaxDepth ?? this.blackAiMaxDepth,
+      aiVsAiStepDelayMs: aiVsAiStepDelayMs ?? this.aiVsAiStepDelayMs,
     );
   }
 
@@ -254,5 +269,8 @@ class ChessState extends Equatable {
     blackAiStrength,
     aiMaxDepth,
     aiMaxThinkMs,
+    redAiMaxDepth,
+    blackAiMaxDepth,
+    aiVsAiStepDelayMs,
   ];
 }

@@ -131,10 +131,15 @@ void main() {
         playMode: PlayMode.withAIvsAI,
         redAiStrength: AiStrength.easy,
         blackAiStrength: AiStrength.hard,
+        redAiMaxDepth: 4,
+        blackAiMaxDepth: 8,
+        aiVsAiStepDelayMs: 50,
       ),
     );
     await _waitFor(bloc, (state) => engine.requestedAutoStrengths.length == 1);
     expect(engine.requestedAutoStrengths, [AiStrength.easy]);
+    expect(engine.requestedAutoDepths, [4]);
+    expect(engine.requestedAutoThinkMs, [AiStrength.easy.maxThinkMs]);
     expect(bloc.state.canInteractBoard, isFalse);
 
     bloc.add(ChessEventMoveRequested(redMove));
@@ -143,13 +148,12 @@ void main() {
     expect(bloc.state.board.lastMoves, isEmpty);
 
     engine.completeAiVsAiMove(redMove.mv);
-    await _waitFor(
-      bloc,
-      (state) =>
-          state.board.lastMoves.length == 1 &&
-          engine.requestedAutoStrengths.length == 2,
-    );
+    await _waitFor(bloc, (state) => state.board.lastMoves.length == 1);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(engine.requestedAutoStrengths, [AiStrength.easy]);
+    await _waitFor(bloc, (state) => engine.requestedAutoStrengths.length == 2);
     expect(engine.requestedAutoStrengths, [AiStrength.easy, AiStrength.hard]);
+    expect(engine.requestedAutoDepths, [4, 8]);
     expect(bloc.state.phase, GamePhase.aiThinking);
 
     final blackMove = bloc.state.board.getMoves().first;
@@ -160,6 +164,9 @@ void main() {
     expect(record?.mode, GamePlayMode.aiVsAi);
     expect(record?.redAiStrength, AiStrength.easy);
     expect(record?.blackAiStrength, AiStrength.hard);
+    expect(record?.redAiMaxDepth, 4);
+    expect(record?.blackAiMaxDepth, 8);
+    expect(record?.aiVsAiStepDelayMs, 50);
     await bloc.close();
   });
 
@@ -528,6 +535,8 @@ class ControlledChessEngine implements ChessEnginePort {
   final Completer<int> resumeMoveCompleter = Completer<int>();
   final List<int> restoredMoves = <int>[];
   final List<AiStrength> requestedAutoStrengths = <AiStrength>[];
+  final List<int> requestedAutoDepths = <int>[];
+  final List<int> requestedAutoThinkMs = <int>[];
   final List<Completer<int>> _aiVsAiMoves = <Completer<int>>[];
   Completer<int>? _activeAiVsAiMove;
   bool disposed = false;
@@ -556,6 +565,8 @@ class ControlledChessEngine implements ChessEnginePort {
   @override
   Future<int> requestAndMakeMove() {
     requestedAutoStrengths.add(strength);
+    requestedAutoDepths.add(maxDepth);
+    requestedAutoThinkMs.add(maxThinkMs);
     if (_aiVsAiMoves.isNotEmpty) {
       _activeAiVsAiMove = _aiVsAiMoves.removeAt(0);
       return _activeAiVsAiMove!.future;

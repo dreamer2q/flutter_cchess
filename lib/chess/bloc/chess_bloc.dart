@@ -94,6 +94,17 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         aiStrength: event.aiStrength,
         aiMaxDepth: event.resolvedAiMaxDepth,
         aiMaxThinkMs: event.resolvedAiMaxThinkMs,
+        redAiMaxDepth:
+            event.redAiMaxDepth ??
+            (event.playMode == PlayMode.withAIvsAI
+                ? (event.redAiStrength ?? event.aiStrength).maxDepth
+                : event.resolvedAiMaxDepth),
+        blackAiMaxDepth:
+            event.blackAiMaxDepth ??
+            (event.playMode == PlayMode.withAIvsAI
+                ? (event.blackAiStrength ?? event.aiStrength).maxDepth
+                : event.resolvedAiMaxDepth),
+        aiVsAiStepDelayMs: event.aiVsAiStepDelayMs,
       ),
     );
     try {
@@ -159,6 +170,17 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           blackAiStrength: event.blackAiStrength ?? event.aiStrength,
           aiMaxDepth: event.resolvedAiMaxDepth,
           aiMaxThinkMs: event.resolvedAiMaxThinkMs,
+          redAiMaxDepth:
+              event.redAiMaxDepth ??
+              (event.playMode == PlayMode.withAIvsAI
+                  ? (event.redAiStrength ?? event.aiStrength).maxDepth
+                  : event.resolvedAiMaxDepth),
+          blackAiMaxDepth:
+              event.blackAiMaxDepth ??
+              (event.playMode == PlayMode.withAIvsAI
+                  ? (event.blackAiStrength ?? event.aiStrength).maxDepth
+                  : event.resolvedAiMaxDepth),
+          aiVsAiStepDelayMs: event.aiVsAiStepDelayMs,
         ),
       );
       if (_clock!.isExpired(event.initialBoard.innerBoard.sdPlayer)) {
@@ -326,7 +348,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     if (requestAi && !finished) {
       _requestAiMove(humanMove: move.mv);
     } else if (requestAiVsAi && !finished && !keepPaused) {
-      _requestAiVsAiMove();
+      _requestAiVsAiMove(respectStepDelay: true);
     }
   }
 
@@ -509,7 +531,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     );
   }
 
-  void _requestAiVsAiMove() {
+  void _requestAiVsAiMove({bool respectStepDelay = false}) {
     final engine = _engine;
     if (engine == null || state.playMode != PlayMode.withAIvsAI) return;
     final side = state.board.innerBoard.sdPlayer == PlaySide.red.index
@@ -518,14 +540,32 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     final strength = side == PlaySide.red
         ? state.redAiStrength
         : state.blackAiStrength;
+    final maxDepth = side == PlaySide.red
+        ? state.redAiMaxDepth
+        : state.blackAiMaxDepth;
     final generation = ++_taskGeneration;
     _aiVsAiSearchPending = true;
     unawaited(
       () async {
-        await engine.setStrength(strength);
+        if (respectStepDelay && state.aiVsAiStepDelayMs > 0) {
+          await Future<void>.delayed(
+            Duration(milliseconds: state.aiVsAiStepDelayMs),
+          );
+        }
+        if (generation != _taskGeneration ||
+            state.playMode != PlayMode.withAIvsAI ||
+            state.phase == GamePhase.paused) {
+          _aiVsAiSearchPending = false;
+          return null;
+        }
+        await engine.setStrength(strength, maxDepth: maxDepth);
         return engine.requestAndMakeMove();
       }().then(
-        (mv) => add(_ChessEventAiResolved(generation, MovePos.mv(mv), null)),
+        (mv) {
+          if (mv != null) {
+            add(_ChessEventAiResolved(generation, MovePos.mv(mv), null));
+          }
+        },
         onError: (Object error, StackTrace stackTrace) {
           addError(error, stackTrace);
           add(_ChessEventAiResolved(generation, null, error));
@@ -834,6 +874,9 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       blackAiStrength: state.blackAiStrength,
       aiMaxDepth: state.aiMaxDepth,
       aiMaxThinkMs: state.aiMaxThinkMs,
+      redAiMaxDepth: state.redAiMaxDepth,
+      blackAiMaxDepth: state.blackAiMaxDepth,
+      aiVsAiStepDelayMs: state.aiVsAiStepDelayMs,
     );
   }
 

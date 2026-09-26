@@ -38,6 +38,9 @@ class ChessPage extends StatefulWidget {
     this.blackAiStrength = AiStrength.normal,
     this.aiMaxDepth,
     this.aiMaxThinkMs,
+    this.redAiMaxDepth,
+    this.blackAiMaxDepth,
+    this.aiVsAiStepDelayMs = 0,
   });
 
   final PlayMode playMode;
@@ -48,6 +51,9 @@ class ChessPage extends StatefulWidget {
   final AiStrength blackAiStrength;
   final int? aiMaxDepth;
   final int? aiMaxThinkMs;
+  final int? redAiMaxDepth;
+  final int? blackAiMaxDepth;
+  final int aiVsAiStepDelayMs;
 
   @override
   State<ChessPage> createState() => _ChessPageState();
@@ -148,6 +154,15 @@ class _ChessPageState extends State<ChessPage> {
                           (widget.aiStrength == bootstrap.settings.aiStrength
                               ? bootstrap.settings.aiMaxThinkMs
                               : widget.aiStrength.maxThinkMs),
+                      redAiMaxDepth:
+                          widget.initialRecord?.redAiMaxDepth ??
+                          widget.redAiMaxDepth,
+                      blackAiMaxDepth:
+                          widget.initialRecord?.blackAiMaxDepth ??
+                          widget.blackAiMaxDepth,
+                      aiVsAiStepDelayMs:
+                          widget.initialRecord?.aiVsAiStepDelayMs ??
+                          widget.aiVsAiStepDelayMs,
                       openingBookLines: bootstrap.openingBookLines,
                     ),
                   ),
@@ -407,6 +422,9 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                               aiStrength: state.aiStrength,
                               redAiStrength: state.redAiStrength,
                               blackAiStrength: state.blackAiStrength,
+                              redAiMaxDepth: state.redAiMaxDepth,
+                              blackAiMaxDepth: state.blackAiMaxDepth,
+                              aiVsAiStepDelayMs: state.aiVsAiStepDelayMs,
                             ),
                           ),
                         );
@@ -513,6 +531,9 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
           aiStrength: state.aiStrength,
           redAiStrength: state.redAiStrength,
           blackAiStrength: state.blackAiStrength,
+          redAiMaxDepth: state.redAiMaxDepth,
+          blackAiMaxDepth: state.blackAiMaxDepth,
+          aiVsAiStepDelayMs: state.aiVsAiStepDelayMs,
         ),
       ),
     );

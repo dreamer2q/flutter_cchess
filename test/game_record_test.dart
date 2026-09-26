@@ -21,6 +21,9 @@ void main() {
     blackAiStrength: AiStrength.normal,
     aiMaxDepth: 7,
     aiMaxThinkMs: 1900,
+    redAiMaxDepth: 4,
+    blackAiMaxDepth: 8,
+    aiVsAiStepDelayMs: 1200,
   );
 
   test('round trips a game record through JSON', () {
@@ -39,7 +42,10 @@ void main() {
       ..remove('aiMaxDepth')
       ..remove('aiMaxThinkMs')
       ..remove('redAiStrength')
-      ..remove('blackAiStrength');
+      ..remove('blackAiStrength')
+      ..remove('redAiMaxDepth')
+      ..remove('blackAiMaxDepth')
+      ..remove('aiVsAiStepDelayMs');
 
     final migrated = GameRecord.fromJson(legacy);
     expect(migrated.aiMaxDepth, AiStrength.hard.maxDepth);
@@ -53,13 +59,38 @@ void main() {
       mode: GamePlayMode.aiVsAi,
       redAiStrength: AiStrength.easy,
       blackAiStrength: AiStrength.hard,
+      redAiMaxDepth: 5,
+      blackAiMaxDepth: 8,
+      aiVsAiStepDelayMs: 800,
     );
 
     final restored = GameRecord.decode(duel.encode());
     expect(restored.mode, GamePlayMode.aiVsAi);
     expect(restored.redAiStrength, AiStrength.easy);
     expect(restored.blackAiStrength, AiStrength.hard);
+    expect(restored.redAiMaxDepth, 5);
+    expect(restored.blackAiMaxDepth, 8);
+    expect(restored.aiVsAiStepDelayMs, 800);
     expect(restored, duel);
+  });
+
+  test('legacy AI-vs-AI records use each strength preset depth', () {
+    final legacy =
+        record
+            .copyWith(
+              mode: GamePlayMode.aiVsAi,
+              redAiStrength: AiStrength.easy,
+              blackAiStrength: AiStrength.hard,
+            )
+            .toJson()
+          ..remove('redAiMaxDepth')
+          ..remove('blackAiMaxDepth')
+          ..remove('aiVsAiStepDelayMs');
+
+    final restored = GameRecord.fromJson(legacy);
+    expect(restored.redAiMaxDepth, AiStrength.easy.maxDepth);
+    expect(restored.blackAiMaxDepth, AiStrength.hard.maxDepth);
+    expect(restored.aiVsAiStepDelayMs, 0);
   });
 
   test('old strong-game settings are migrated to a bounded search budget', () {

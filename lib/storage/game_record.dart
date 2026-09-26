@@ -55,11 +55,17 @@ class GameRecord {
     AiStrength? blackAiStrength,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
+    int? redAiMaxDepth,
+    int? blackAiMaxDepth,
+    this.aiVsAiStepDelayMs = 0,
   }) : aiStrength = aiStrength,
        redAiStrength = redAiStrength ?? aiStrength,
        blackAiStrength = blackAiStrength ?? aiStrength,
        aiMaxDepth = aiMaxDepth ?? aiStrength.maxDepth,
        aiMaxThinkMs = aiMaxThinkMs ?? aiStrength.maxThinkMs,
+       redAiMaxDepth = redAiMaxDepth ?? (redAiStrength ?? aiStrength).maxDepth,
+       blackAiMaxDepth =
+           blackAiMaxDepth ?? (blackAiStrength ?? aiStrength).maxDepth,
        moves = List.unmodifiable(moves);
 
   final String id;
@@ -77,6 +83,9 @@ class GameRecord {
   final AiStrength blackAiStrength;
   final int aiMaxDepth;
   final int aiMaxThinkMs;
+  final int redAiMaxDepth;
+  final int blackAiMaxDepth;
+  final int aiVsAiStepDelayMs;
 
   GameRecord copyWith({
     String? id,
@@ -94,6 +103,9 @@ class GameRecord {
     AiStrength? blackAiStrength,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
+    int? redAiMaxDepth,
+    int? blackAiMaxDepth,
+    int? aiVsAiStepDelayMs,
   }) {
     return GameRecord(
       id: id ?? this.id,
@@ -111,6 +123,9 @@ class GameRecord {
       blackAiStrength: blackAiStrength ?? this.blackAiStrength,
       aiMaxDepth: aiMaxDepth ?? this.aiMaxDepth,
       aiMaxThinkMs: aiMaxThinkMs ?? this.aiMaxThinkMs,
+      redAiMaxDepth: redAiMaxDepth ?? this.redAiMaxDepth,
+      blackAiMaxDepth: blackAiMaxDepth ?? this.blackAiMaxDepth,
+      aiVsAiStepDelayMs: aiVsAiStepDelayMs ?? this.aiVsAiStepDelayMs,
     );
   }
 
@@ -130,6 +145,9 @@ class GameRecord {
     'blackAiStrength': blackAiStrength.name,
     'aiMaxDepth': aiMaxDepth,
     'aiMaxThinkMs': aiMaxThinkMs,
+    'redAiMaxDepth': redAiMaxDepth,
+    'blackAiMaxDepth': blackAiMaxDepth,
+    'aiVsAiStepDelayMs': aiVsAiStepDelayMs,
   };
 
   String encode() => jsonEncode(toJson());
@@ -162,6 +180,10 @@ class GameRecord {
     );
     final storedAiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
     final storedAiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
+    final storedRedAiMaxDepth = json['redAiMaxDepth'] ?? redAiStrength.maxDepth;
+    final storedBlackAiMaxDepth =
+        json['blackAiMaxDepth'] ?? blackAiStrength.maxDepth;
+    final aiVsAiStepDelayMs = json['aiVsAiStepDelayMs'] ?? 0;
 
     if (id is! String ||
         id.isEmpty ||
@@ -178,7 +200,16 @@ class GameRecord {
         storedAiMaxDepth > 64 ||
         storedAiMaxThinkMs is! int ||
         storedAiMaxThinkMs < 100 ||
-        storedAiMaxThinkMs > 10000) {
+        storedAiMaxThinkMs > 10000 ||
+        storedRedAiMaxDepth is! int ||
+        storedRedAiMaxDepth < 1 ||
+        storedRedAiMaxDepth > 64 ||
+        storedBlackAiMaxDepth is! int ||
+        storedBlackAiMaxDepth < 1 ||
+        storedBlackAiMaxDepth > 64 ||
+        aiVsAiStepDelayMs is! int ||
+        aiVsAiStepDelayMs < 0 ||
+        aiVsAiStepDelayMs > 5000) {
       throw const FormatException('Invalid game record.');
     }
     final legacyHardDefault = AiStrength.isLegacyHardDefault(
@@ -222,6 +253,9 @@ class GameRecord {
       blackAiStrength: blackAiStrength,
       aiMaxDepth: aiMaxDepth,
       aiMaxThinkMs: aiMaxThinkMs,
+      redAiMaxDepth: AiStrength.clampDepth(storedRedAiMaxDepth),
+      blackAiMaxDepth: AiStrength.clampDepth(storedBlackAiMaxDepth),
+      aiVsAiStepDelayMs: aiVsAiStepDelayMs,
     );
   }
 

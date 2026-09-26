@@ -26,8 +26,6 @@ class _NewChessPageState extends State<NewChessPage> {
   late Future<_HomeData> _homeData = _loadHomeData();
   int _timeControlSeconds = 900;
   AiStrength? _selectedStrength;
-  AiStrength? _selectedRedStrength;
-  AiStrength? _selectedBlackStrength;
 
   Future<_HomeData> _loadHomeData() async {
     final preferences = await SharedPreferences.getInstance();
@@ -51,9 +49,6 @@ class _NewChessPageState extends State<NewChessPage> {
         final data = snapshot.data ?? const _HomeData();
         final currentGame = data.currentGame;
         final aiStrength = _selectedStrength ?? data.settings.aiStrength;
-        final redAiStrength = _selectedRedStrength ?? data.settings.aiStrength;
-        final blackAiStrength =
-            _selectedBlackStrength ?? data.settings.aiStrength;
         return Scaffold(
           backgroundColor: const Color(0xFFF0F2F1),
           body: SafeArea(
@@ -76,17 +71,10 @@ class _NewChessPageState extends State<NewChessPage> {
                               onImport: _importRecord,
                               timeControlSeconds: _timeControlSeconds,
                               aiStrength: aiStrength,
-                              redAiStrength: redAiStrength,
-                              blackAiStrength: blackAiStrength,
                               onTimeChanged: (value) =>
                                   setState(() => _timeControlSeconds = value),
                               onStrengthChanged: (value) =>
                                   setState(() => _selectedStrength = value),
-                              onRedStrengthChanged: (value) =>
-                                  setState(() => _selectedRedStrength = value),
-                              onBlackStrengthChanged: (value) => setState(
-                                () => _selectedBlackStrength = value,
-                              ),
                             )
                           : _MobileHome(
                               currentGame: currentGame,
@@ -95,17 +83,10 @@ class _NewChessPageState extends State<NewChessPage> {
                               onImport: _importRecord,
                               timeControlSeconds: _timeControlSeconds,
                               aiStrength: aiStrength,
-                              redAiStrength: redAiStrength,
-                              blackAiStrength: blackAiStrength,
                               onTimeChanged: (value) =>
                                   setState(() => _timeControlSeconds = value),
                               onStrengthChanged: (value) =>
                                   setState(() => _selectedStrength = value),
-                              onRedStrengthChanged: (value) =>
-                                  setState(() => _selectedRedStrength = value),
-                              onBlackStrengthChanged: (value) => setState(
-                                () => _selectedBlackStrength = value,
-                              ),
                             ),
                     ),
                   ],
@@ -119,9 +100,34 @@ class _NewChessPageState extends State<NewChessPage> {
   }
 
   Future<void> _openGame(PlayMode playMode, GameSettings settings) async {
+    if (playMode == PlayMode.withAIvsAI) {
+      final config = await showDialog<_AiVsAiConfig>(
+        context: context,
+        builder: (_) =>
+            _AiVsAiSetupDialog(initialTimeControlSeconds: _timeControlSeconds),
+      );
+      if (config == null || !mounted) return;
+      setState(() => _timeControlSeconds = config.timeControlSeconds);
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChessPage(
+            playMode: playMode,
+            timeControlSeconds: config.timeControlSeconds,
+            aiStrength: config.redStrength,
+            redAiStrength: config.redStrength,
+            blackAiStrength: config.blackStrength,
+            aiMaxDepth: config.redDepth,
+            aiMaxThinkMs: config.redStrength.maxThinkMs,
+            redAiMaxDepth: config.redDepth,
+            blackAiMaxDepth: config.blackDepth,
+            aiVsAiStepDelayMs: config.stepDelayMs,
+          ),
+        ),
+      );
+      _reloadHome();
+      return;
+    }
     final strength = _selectedStrength ?? settings.aiStrength;
-    final redStrength = _selectedRedStrength ?? settings.aiStrength;
-    final blackStrength = _selectedBlackStrength ?? settings.aiStrength;
     final usesConfiguredLimits = strength == settings.aiStrength;
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -129,8 +135,6 @@ class _NewChessPageState extends State<NewChessPage> {
           playMode: playMode,
           timeControlSeconds: _timeControlSeconds,
           aiStrength: strength,
-          redAiStrength: redStrength,
-          blackAiStrength: blackStrength,
           aiMaxDepth: usesConfiguredLimits
               ? settings.aiMaxDepth
               : strength.maxDepth,
@@ -214,8 +218,6 @@ class _NewChessPageState extends State<NewChessPage> {
     if (mounted) {
       setState(() {
         _selectedStrength = null;
-        _selectedRedStrength = null;
-        _selectedBlackStrength = null;
         _homeData = _loadHomeData();
       });
     }
@@ -228,12 +230,6 @@ class _HomeData {
   final GameRecord? currentGame;
   final GameSettings settings;
 }
-
-String _strengthLabel(AiStrength strength) => switch (strength) {
-  AiStrength.easy => '入门',
-  AiStrength.normal => '普通',
-  AiStrength.hard => '较强',
-};
 
 String _gamePlayModeLabel(GamePlayMode mode) => switch (mode) {
   GamePlayMode.self => '本地双人',
@@ -315,12 +311,8 @@ class _DesktopHome extends StatelessWidget {
     required this.currentGame,
     required this.timeControlSeconds,
     required this.aiStrength,
-    required this.redAiStrength,
-    required this.blackAiStrength,
     required this.onTimeChanged,
     required this.onStrengthChanged,
-    required this.onRedStrengthChanged,
-    required this.onBlackStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
@@ -329,12 +321,8 @@ class _DesktopHome extends StatelessWidget {
   final GameRecord? currentGame;
   final int timeControlSeconds;
   final AiStrength aiStrength;
-  final AiStrength redAiStrength;
-  final AiStrength blackAiStrength;
   final ValueChanged<int> onTimeChanged;
   final ValueChanged<AiStrength> onStrengthChanged;
-  final ValueChanged<AiStrength> onRedStrengthChanged;
-  final ValueChanged<AiStrength> onBlackStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -357,12 +345,8 @@ class _DesktopHome extends StatelessWidget {
                     currentGame: currentGame,
                     timeControlSeconds: timeControlSeconds,
                     aiStrength: aiStrength,
-                    redAiStrength: redAiStrength,
-                    blackAiStrength: blackAiStrength,
                     onTimeChanged: onTimeChanged,
                     onStrengthChanged: onStrengthChanged,
-                    onRedStrengthChanged: onRedStrengthChanged,
-                    onBlackStrengthChanged: onBlackStrengthChanged,
                   ),
                 ),
               ),
@@ -382,12 +366,8 @@ class _MobileHome extends StatelessWidget {
     required this.currentGame,
     required this.timeControlSeconds,
     required this.aiStrength,
-    required this.redAiStrength,
-    required this.blackAiStrength,
     required this.onTimeChanged,
     required this.onStrengthChanged,
-    required this.onRedStrengthChanged,
-    required this.onBlackStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
@@ -396,12 +376,8 @@ class _MobileHome extends StatelessWidget {
   final GameRecord? currentGame;
   final int timeControlSeconds;
   final AiStrength aiStrength;
-  final AiStrength redAiStrength;
-  final AiStrength blackAiStrength;
   final ValueChanged<int> onTimeChanged;
   final ValueChanged<AiStrength> onStrengthChanged;
-  final ValueChanged<AiStrength> onRedStrengthChanged;
-  final ValueChanged<AiStrength> onBlackStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -418,12 +394,8 @@ class _MobileHome extends StatelessWidget {
             currentGame: currentGame,
             timeControlSeconds: timeControlSeconds,
             aiStrength: aiStrength,
-            redAiStrength: redAiStrength,
-            blackAiStrength: blackAiStrength,
             onTimeChanged: onTimeChanged,
             onStrengthChanged: onStrengthChanged,
-            onRedStrengthChanged: onRedStrengthChanged,
-            onBlackStrengthChanged: onBlackStrengthChanged,
           ),
         ],
       ),
@@ -509,12 +481,8 @@ class _ModeChooser extends StatelessWidget {
     required this.currentGame,
     required this.timeControlSeconds,
     required this.aiStrength,
-    required this.redAiStrength,
-    required this.blackAiStrength,
     required this.onTimeChanged,
     required this.onStrengthChanged,
-    required this.onRedStrengthChanged,
-    required this.onBlackStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
@@ -523,12 +491,8 @@ class _ModeChooser extends StatelessWidget {
   final GameRecord? currentGame;
   final int timeControlSeconds;
   final AiStrength aiStrength;
-  final AiStrength redAiStrength;
-  final AiStrength blackAiStrength;
   final ValueChanged<int> onTimeChanged;
   final ValueChanged<AiStrength> onStrengthChanged;
-  final ValueChanged<AiStrength> onRedStrengthChanged;
-  final ValueChanged<AiStrength> onBlackStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -588,7 +552,9 @@ class _ModeChooser extends StatelessWidget {
                   DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
                 ],
                 onChanged: (value) {
-                  if (value != null) onStrengthChanged(value);
+                  if (value != null) {
+                    onStrengthChanged(value);
+                  }
                 },
               );
               if (constraints.maxWidth < 340) {
@@ -605,62 +571,6 @@ class _ModeChooser extends StatelessWidget {
                   Expanded(child: timeField),
                   const SizedBox(width: 12),
                   Expanded(child: strengthField),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'AI 对战强度',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: const Color(0xFF46514D),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              DropdownButtonFormField<AiStrength> strengthField({
-                required String label,
-                required AiStrength strength,
-                required ValueChanged<AiStrength> onChanged,
-              }) => DropdownButtonFormField<AiStrength>(
-                initialValue: strength,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: label,
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: AiStrength.easy, child: Text('入门')),
-                  DropdownMenuItem(value: AiStrength.normal, child: Text('普通')),
-                  DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
-                ],
-                onChanged: (value) {
-                  if (value != null) onChanged(value);
-                },
-              );
-              final redField = strengthField(
-                label: '红方电脑',
-                strength: redAiStrength,
-                onChanged: onRedStrengthChanged,
-              );
-              final blackField = strengthField(
-                label: '黑方电脑',
-                strength: blackAiStrength,
-                onChanged: onBlackStrengthChanged,
-              );
-              if (constraints.maxWidth < 340) {
-                return Column(
-                  children: [redField, const SizedBox(height: 10), blackField],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: redField),
-                  const SizedBox(width: 12),
-                  Expanded(child: blackField),
                 ],
               );
             },
@@ -688,8 +598,7 @@ class _ModeChooser extends StatelessWidget {
           _ModeButton(
             icon: Icons.smart_toy,
             title: 'AI 对战',
-            description:
-                '红方 ${_strengthLabel(redAiStrength)} · 黑方 ${_strengthLabel(blackAiStrength)}',
+            description: '红方电脑 · 黑方电脑',
             onTap: () => onOpen(PlayMode.withAIvsAI),
           ),
           const SizedBox(height: 12),
@@ -726,6 +635,190 @@ class _ModeChooser extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AiVsAiConfig {
+  const _AiVsAiConfig({
+    required this.timeControlSeconds,
+    required this.redStrength,
+    required this.redDepth,
+    required this.blackStrength,
+    required this.blackDepth,
+    required this.stepDelayMs,
+  });
+
+  final int timeControlSeconds;
+  final AiStrength redStrength;
+  final int redDepth;
+  final AiStrength blackStrength;
+  final int blackDepth;
+  final int stepDelayMs;
+}
+
+class _AiVsAiSetupDialog extends StatefulWidget {
+  const _AiVsAiSetupDialog({required this.initialTimeControlSeconds});
+
+  final int initialTimeControlSeconds;
+
+  @override
+  State<_AiVsAiSetupDialog> createState() => _AiVsAiSetupDialogState();
+}
+
+class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
+  late int _timeControlSeconds = widget.initialTimeControlSeconds;
+  AiStrength _redStrength = AiStrength.hard;
+  int _redDepth = AiStrength.maxConfiguredDepth;
+  AiStrength _blackStrength = AiStrength.hard;
+  int _blackDepth = AiStrength.maxConfiguredDepth;
+  int _stepDelayMs = 800;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('AI 对战'),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.58,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: _timeControlSeconds,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '每方用时',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 300, child: Text('5 分钟')),
+                  DropdownMenuItem(value: 600, child: Text('10 分钟')),
+                  DropdownMenuItem(value: 900, child: Text('15 分钟')),
+                  DropdownMenuItem(value: 1800, child: Text('30 分钟')),
+                  DropdownMenuItem(value: 0, child: Text('不限时')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _timeControlSeconds = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 18),
+              _sideControls(
+                title: '红方电脑',
+                strength: _redStrength,
+                depth: _redDepth,
+                onStrengthChanged: (value) =>
+                    setState(() => _redStrength = value),
+                onDepthChanged: (value) => setState(() => _redDepth = value),
+              ),
+              Divider(color: theme.colorScheme.outlineVariant),
+              _sideControls(
+                title: '黑方电脑',
+                strength: _blackStrength,
+                depth: _blackDepth,
+                onStrengthChanged: (value) =>
+                    setState(() => _blackStrength = value),
+                onDepthChanged: (value) => setState(() => _blackDepth = value),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: _stepDelayMs,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '每步之间停顿',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('无停顿')),
+                  DropdownMenuItem(value: 400, child: Text('0.4 秒')),
+                  DropdownMenuItem(value: 800, child: Text('0.8 秒')),
+                  DropdownMenuItem(value: 1200, child: Text('1.2 秒')),
+                  DropdownMenuItem(value: 1800, child: Text('1.8 秒')),
+                  DropdownMenuItem(value: 2500, child: Text('2.5 秒')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _stepDelayMs = value);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton.icon(
+          onPressed: () => Navigator.pop(
+            context,
+            _AiVsAiConfig(
+              timeControlSeconds: _timeControlSeconds,
+              redStrength: _redStrength,
+              redDepth: _redDepth,
+              blackStrength: _blackStrength,
+              blackDepth: _blackDepth,
+              stepDelayMs: _stepDelayMs,
+            ),
+          ),
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('开始对战'),
+        ),
+      ],
+    );
+  }
+
+  Widget _sideControls({
+    required String title,
+    required AiStrength strength,
+    required int depth,
+    required ValueChanged<AiStrength> onStrengthChanged,
+    required ValueChanged<int> onDepthChanged,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<AiStrength>(
+          initialValue: strength,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '电脑强度',
+            border: OutlineInputBorder(),
+          ),
+          items: const [
+            DropdownMenuItem(value: AiStrength.easy, child: Text('入门')),
+            DropdownMenuItem(value: AiStrength.normal, child: Text('普通')),
+            DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              onStrengthChanged(value);
+            }
+          },
+        ),
+        const SizedBox(height: 4),
+        Row(children: [const Text('思考深度'), const Spacer(), Text('$depth 层')]),
+        Slider(
+          value: depth.toDouble(),
+          min: 1,
+          max: AiStrength.maxConfiguredDepth.toDouble(),
+          divisions: AiStrength.maxConfiguredDepth - 1,
+          label: '$depth 层',
+          onChanged: (value) => onDepthChanged(value.round()),
+        ),
+      ],
     );
   }
 }
