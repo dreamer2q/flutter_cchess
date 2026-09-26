@@ -5,6 +5,7 @@ class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let minimumWindowSize = NSSize(width: 920, height: 760)
     self.minSize = minimumWindowSize
+    self.appearance = NSAppearance(named: .aqua)
 
     let flutterViewController = FlutterViewController()
     var windowFrame = self.frame
