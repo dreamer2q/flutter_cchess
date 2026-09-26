@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
 
 /// The local play modes supported by the offline product.
-enum GamePlayMode { self, ai }
+enum GamePlayMode { self, ai, aiVsAi }
 
 /// The absolute result of a game, independent of which side the user played.
 enum GameResult { inProgress, redWin, blackWin, draw }
@@ -51,9 +51,13 @@ class GameRecord {
     this.blackElapsedMs = 0,
     this.timeControlSeconds = 900,
     AiStrength aiStrength = AiStrength.normal,
+    AiStrength? redAiStrength,
+    AiStrength? blackAiStrength,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
   }) : aiStrength = aiStrength,
+       redAiStrength = redAiStrength ?? aiStrength,
+       blackAiStrength = blackAiStrength ?? aiStrength,
        aiMaxDepth = aiMaxDepth ?? aiStrength.maxDepth,
        aiMaxThinkMs = aiMaxThinkMs ?? aiStrength.maxThinkMs,
        moves = List.unmodifiable(moves);
@@ -69,6 +73,8 @@ class GameRecord {
   final int blackElapsedMs;
   final int timeControlSeconds;
   final AiStrength aiStrength;
+  final AiStrength redAiStrength;
+  final AiStrength blackAiStrength;
   final int aiMaxDepth;
   final int aiMaxThinkMs;
 
@@ -84,6 +90,8 @@ class GameRecord {
     int? blackElapsedMs,
     int? timeControlSeconds,
     AiStrength? aiStrength,
+    AiStrength? redAiStrength,
+    AiStrength? blackAiStrength,
     int? aiMaxDepth,
     int? aiMaxThinkMs,
   }) {
@@ -99,6 +107,8 @@ class GameRecord {
       blackElapsedMs: blackElapsedMs ?? this.blackElapsedMs,
       timeControlSeconds: timeControlSeconds ?? this.timeControlSeconds,
       aiStrength: aiStrength ?? this.aiStrength,
+      redAiStrength: redAiStrength ?? this.redAiStrength,
+      blackAiStrength: blackAiStrength ?? this.blackAiStrength,
       aiMaxDepth: aiMaxDepth ?? this.aiMaxDepth,
       aiMaxThinkMs: aiMaxThinkMs ?? this.aiMaxThinkMs,
     );
@@ -116,6 +126,8 @@ class GameRecord {
     'blackElapsedMs': blackElapsedMs,
     'timeControlSeconds': timeControlSeconds,
     'aiStrength': aiStrength.name,
+    'redAiStrength': redAiStrength.name,
+    'blackAiStrength': blackAiStrength.name,
     'aiMaxDepth': aiMaxDepth,
     'aiMaxThinkMs': aiMaxThinkMs,
   };
@@ -136,6 +148,18 @@ class GameRecord {
       throw const FormatException('Invalid AI strength.');
     }
     final aiStrength = AiStrength.fromName(aiStrengthValue as String?);
+    final redStrengthValue = json['redAiStrength'];
+    final blackStrengthValue = json['blackAiStrength'];
+    if ((redStrengthValue != null && redStrengthValue is! String) ||
+        (blackStrengthValue != null && blackStrengthValue is! String)) {
+      throw const FormatException('Invalid side AI strength.');
+    }
+    final redAiStrength = AiStrength.fromName(
+      redStrengthValue as String? ?? aiStrength.name,
+    );
+    final blackAiStrength = AiStrength.fromName(
+      blackStrengthValue as String? ?? aiStrength.name,
+    );
     final storedAiMaxDepth = json['aiMaxDepth'] ?? aiStrength.maxDepth;
     final storedAiMaxThinkMs = json['aiMaxThinkMs'] ?? aiStrength.maxThinkMs;
 
@@ -194,6 +218,8 @@ class GameRecord {
       blackElapsedMs: _intValue(json['blackElapsedMs']),
       timeControlSeconds: timeControlSeconds,
       aiStrength: aiStrength,
+      redAiStrength: redAiStrength,
+      blackAiStrength: blackAiStrength,
       aiMaxDepth: aiMaxDepth,
       aiMaxThinkMs: aiMaxThinkMs,
     );

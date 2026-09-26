@@ -14,6 +14,8 @@ class ChessEventInitialized extends ChessEvent {
     this.redElapsedMs = 0,
     this.blackElapsedMs = 0,
     this.aiStrength = AiStrength.normal,
+    this.redAiStrength,
+    this.blackAiStrength,
     this.aiMaxDepth,
     this.aiMaxThinkMs,
     this.openingBookLines = const [],
@@ -24,6 +26,8 @@ class ChessEventInitialized extends ChessEvent {
   final int redElapsedMs;
   final int blackElapsedMs;
   final AiStrength aiStrength;
+  final AiStrength? redAiStrength;
+  final AiStrength? blackAiStrength;
   final int? aiMaxDepth;
   final int? aiMaxThinkMs;
   final List<List<int>> openingBookLines;
@@ -37,6 +41,8 @@ class ChessEventInitialized extends ChessEvent {
     redElapsedMs,
     blackElapsedMs,
     aiStrength,
+    redAiStrength,
+    blackAiStrength,
     aiMaxDepth,
     aiMaxThinkMs,
     openingBookLines,

@@ -116,6 +116,117 @@ void main() {
     await bloc.close();
   });
 
+  test('AI-vs-AI alternates side strengths and blocks board input', () async {
+    final engine = ControlledChessEngine()
+      ..queueAiVsAiMove()
+      ..queueAiVsAiMove();
+    final repository = InMemoryGameRepository();
+    final bloc = _bloc(engine: engine, repository: repository);
+    final initial = FenUtil.parse(initialFenString);
+    final redMove = initial.getMoves().first;
+
+    bloc.add(
+      ChessEventInitialized(
+        initialBoard: initial,
+        playMode: PlayMode.withAIvsAI,
+        redAiStrength: AiStrength.easy,
+        blackAiStrength: AiStrength.hard,
+      ),
+    );
+    await _waitFor(bloc, (state) => engine.requestedAutoStrengths.length == 1);
+    expect(engine.requestedAutoStrengths, [AiStrength.easy]);
+    expect(bloc.state.canInteractBoard, isFalse);
+
+    bloc.add(ChessEventMoveRequested(redMove));
+    bloc.add(ChessEventBoardTap(redMove.srcPos));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(bloc.state.board.lastMoves, isEmpty);
+
+    engine.completeAiVsAiMove(redMove.mv);
+    await _waitFor(
+      bloc,
+      (state) =>
+          state.board.lastMoves.length == 1 &&
+          engine.requestedAutoStrengths.length == 2,
+    );
+    expect(engine.requestedAutoStrengths, [AiStrength.easy, AiStrength.hard]);
+    expect(bloc.state.phase, GamePhase.aiThinking);
+
+    final blackMove = bloc.state.board.getMoves().first;
+    engine.completeAiVsAiMove(blackMove.mv);
+    await _waitFor(bloc, (state) => state.board.lastMoves.length == 2);
+    await bloc.flushPersistence();
+    final record = await repository.getCurrent();
+    expect(record?.mode, GamePlayMode.aiVsAi);
+    expect(record?.redAiStrength, AiStrength.easy);
+    expect(record?.blackAiStrength, AiStrength.hard);
+    await bloc.close();
+  });
+
+  test(
+    'AI-vs-AI result while paused waits for resume before next search',
+    () async {
+      final engine = ControlledChessEngine()
+        ..queueAiVsAiMove()
+        ..queueAiVsAiMove();
+      final bloc = _bloc(engine: engine);
+      final initial = FenUtil.parse(initialFenString);
+      final redMove = initial.getMoves().first;
+      bloc.add(
+        ChessEventInitialized(
+          initialBoard: initial,
+          playMode: PlayMode.withAIvsAI,
+        ),
+      );
+      await _waitFor(
+        bloc,
+        (state) => engine.requestedAutoStrengths.length == 1,
+      );
+
+      bloc.add(const ChessEventPause());
+      await _waitFor(bloc, (state) => state.phase == GamePhase.paused);
+      engine.completeAiVsAiMove(redMove.mv);
+      await _waitFor(
+        bloc,
+        (state) =>
+            state.phase == GamePhase.paused &&
+            state.board.lastMoves.length == 1,
+      );
+      expect(engine.requestedAutoStrengths, [AiStrength.normal]);
+
+      final blackMove = bloc.state.board.getMoves().first;
+      bloc.add(const ChessEventResume());
+      await _waitFor(
+        bloc,
+        (state) => engine.requestedAutoStrengths.length == 2,
+      );
+      engine.completeAiVsAiMove(blackMove.mv);
+      await _waitFor(bloc, (state) => state.board.lastMoves.length == 2);
+      await bloc.close();
+    },
+  );
+
+  test('real engine completes two legal AI-vs-AI plies', () async {
+    final bloc = _bloc();
+    bloc.add(
+      ChessEventInitialized(
+        initialBoard: FenUtil.parse(initialFenString),
+        playMode: PlayMode.withAIvsAI,
+        timeControlSeconds: 0,
+        redAiStrength: AiStrength.easy,
+        blackAiStrength: AiStrength.easy,
+      ),
+    );
+    final state = await bloc.stream
+        .firstWhere((state) => state.board.lastMoves.length >= 2)
+        .timeout(const Duration(seconds: 10));
+
+    expect(state.board.lastMoves, hasLength(2));
+    expect(state.board.isTurn(PlaySide.red), isTrue);
+    expect(state.phase, GamePhase.aiThinking);
+    await bloc.close();
+  });
+
   test('legal move commits before presentation is acknowledged', () async {
     final bloc = _bloc();
     await _initialize(bloc, PlayMode.withSelf);
@@ -416,6 +527,9 @@ class ControlledChessEngine implements ChessEnginePort {
   final Completer<int> hintCompleter = Completer<int>();
   final Completer<int> resumeMoveCompleter = Completer<int>();
   final List<int> restoredMoves = <int>[];
+  final List<AiStrength> requestedAutoStrengths = <AiStrength>[];
+  final List<Completer<int>> _aiVsAiMoves = <Completer<int>>[];
+  Completer<int>? _activeAiVsAiMove;
   bool disposed = false;
   List<List<int>> openingBookLines = const [];
 
@@ -440,7 +554,27 @@ class ControlledChessEngine implements ChessEnginePort {
   @override
   Future<int> requestMove() => hintCompleter.future;
   @override
-  Future<int> requestAndMakeMove() => resumeMoveCompleter.future;
+  Future<int> requestAndMakeMove() {
+    requestedAutoStrengths.add(strength);
+    if (_aiVsAiMoves.isNotEmpty) {
+      _activeAiVsAiMove = _aiVsAiMoves.removeAt(0);
+      return _activeAiVsAiMove!.future;
+    }
+    return resumeMoveCompleter.future;
+  }
+
+  void queueAiVsAiMove() => _aiVsAiMoves.add(Completer<int>());
+
+  void completeAiVsAiMove(int move) {
+    final completer = _activeAiVsAiMove;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(move);
+      _activeAiVsAiMove = null;
+      return;
+    }
+    fail('No queued AI-vs-AI search to complete.');
+  }
+
   @override
   Future<void> restore(Iterable<int> moves) async {
     restoredMoves

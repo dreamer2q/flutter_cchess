@@ -246,6 +246,9 @@ void main() {
     });
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
+    expect(find.text('AI 对战'), findsOneWidget);
+    expect(find.text('红方电脑'), findsOneWidget);
+    expect(find.text('黑方电脑'), findsOneWidget);
     await tester.tap(find.text('15 分钟'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('5 分钟').last);
@@ -258,7 +261,7 @@ void main() {
           .initialValue,
       300,
     );
-    await tester.tap(find.text('普通'));
+    await tester.tap(find.text('普通').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('较强').last);
     await tester.pumpAndSettle();

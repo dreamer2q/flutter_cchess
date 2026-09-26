@@ -26,6 +26,8 @@ class _NewChessPageState extends State<NewChessPage> {
   late Future<_HomeData> _homeData = _loadHomeData();
   int _timeControlSeconds = 900;
   AiStrength? _selectedStrength;
+  AiStrength? _selectedRedStrength;
+  AiStrength? _selectedBlackStrength;
 
   Future<_HomeData> _loadHomeData() async {
     final preferences = await SharedPreferences.getInstance();
@@ -49,6 +51,9 @@ class _NewChessPageState extends State<NewChessPage> {
         final data = snapshot.data ?? const _HomeData();
         final currentGame = data.currentGame;
         final aiStrength = _selectedStrength ?? data.settings.aiStrength;
+        final redAiStrength = _selectedRedStrength ?? data.settings.aiStrength;
+        final blackAiStrength =
+            _selectedBlackStrength ?? data.settings.aiStrength;
         return Scaffold(
           backgroundColor: const Color(0xFFF0F2F1),
           body: SafeArea(
@@ -71,10 +76,17 @@ class _NewChessPageState extends State<NewChessPage> {
                               onImport: _importRecord,
                               timeControlSeconds: _timeControlSeconds,
                               aiStrength: aiStrength,
+                              redAiStrength: redAiStrength,
+                              blackAiStrength: blackAiStrength,
                               onTimeChanged: (value) =>
                                   setState(() => _timeControlSeconds = value),
                               onStrengthChanged: (value) =>
                                   setState(() => _selectedStrength = value),
+                              onRedStrengthChanged: (value) =>
+                                  setState(() => _selectedRedStrength = value),
+                              onBlackStrengthChanged: (value) => setState(
+                                () => _selectedBlackStrength = value,
+                              ),
                             )
                           : _MobileHome(
                               currentGame: currentGame,
@@ -83,10 +95,17 @@ class _NewChessPageState extends State<NewChessPage> {
                               onImport: _importRecord,
                               timeControlSeconds: _timeControlSeconds,
                               aiStrength: aiStrength,
+                              redAiStrength: redAiStrength,
+                              blackAiStrength: blackAiStrength,
                               onTimeChanged: (value) =>
                                   setState(() => _timeControlSeconds = value),
                               onStrengthChanged: (value) =>
                                   setState(() => _selectedStrength = value),
+                              onRedStrengthChanged: (value) =>
+                                  setState(() => _selectedRedStrength = value),
+                              onBlackStrengthChanged: (value) => setState(
+                                () => _selectedBlackStrength = value,
+                              ),
                             ),
                     ),
                   ],
@@ -101,6 +120,8 @@ class _NewChessPageState extends State<NewChessPage> {
 
   Future<void> _openGame(PlayMode playMode, GameSettings settings) async {
     final strength = _selectedStrength ?? settings.aiStrength;
+    final redStrength = _selectedRedStrength ?? settings.aiStrength;
+    final blackStrength = _selectedBlackStrength ?? settings.aiStrength;
     final usesConfiguredLimits = strength == settings.aiStrength;
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -108,6 +129,8 @@ class _NewChessPageState extends State<NewChessPage> {
           playMode: playMode,
           timeControlSeconds: _timeControlSeconds,
           aiStrength: strength,
+          redAiStrength: redStrength,
+          blackAiStrength: blackStrength,
           aiMaxDepth: usesConfiguredLimits
               ? settings.aiMaxDepth
               : strength.maxDepth,
@@ -121,9 +144,11 @@ class _NewChessPageState extends State<NewChessPage> {
   }
 
   Future<void> _continueGame(GameRecord record) async {
-    final mode = record.mode == GamePlayMode.self
-        ? PlayMode.withSelf
-        : PlayMode.withAI;
+    final mode = switch (record.mode) {
+      GamePlayMode.self => PlayMode.withSelf,
+      GamePlayMode.ai => PlayMode.withAI,
+      GamePlayMode.aiVsAi => PlayMode.withAIvsAI,
+    };
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChessPage(playMode: mode, initialRecord: record),
@@ -189,6 +214,8 @@ class _NewChessPageState extends State<NewChessPage> {
     if (mounted) {
       setState(() {
         _selectedStrength = null;
+        _selectedRedStrength = null;
+        _selectedBlackStrength = null;
         _homeData = _loadHomeData();
       });
     }
@@ -201,6 +228,18 @@ class _HomeData {
   final GameRecord? currentGame;
   final GameSettings settings;
 }
+
+String _strengthLabel(AiStrength strength) => switch (strength) {
+  AiStrength.easy => '入门',
+  AiStrength.normal => '普通',
+  AiStrength.hard => '较强',
+};
+
+String _gamePlayModeLabel(GamePlayMode mode) => switch (mode) {
+  GamePlayMode.self => '本地双人',
+  GamePlayMode.ai => '人机对局',
+  GamePlayMode.aiVsAi => 'AI 对战',
+};
 
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({
@@ -276,8 +315,12 @@ class _DesktopHome extends StatelessWidget {
     required this.currentGame,
     required this.timeControlSeconds,
     required this.aiStrength,
+    required this.redAiStrength,
+    required this.blackAiStrength,
     required this.onTimeChanged,
     required this.onStrengthChanged,
+    required this.onRedStrengthChanged,
+    required this.onBlackStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
@@ -286,8 +329,12 @@ class _DesktopHome extends StatelessWidget {
   final GameRecord? currentGame;
   final int timeControlSeconds;
   final AiStrength aiStrength;
+  final AiStrength redAiStrength;
+  final AiStrength blackAiStrength;
   final ValueChanged<int> onTimeChanged;
   final ValueChanged<AiStrength> onStrengthChanged;
+  final ValueChanged<AiStrength> onRedStrengthChanged;
+  final ValueChanged<AiStrength> onBlackStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -302,15 +349,21 @@ class _DesktopHome extends StatelessWidget {
               const SizedBox(width: 36),
               Expanded(
                 flex: 4,
-                child: _ModeChooser(
-                  onOpen: onOpen,
-                  onContinue: onContinue,
-                  onImport: onImport,
-                  currentGame: currentGame,
-                  timeControlSeconds: timeControlSeconds,
-                  aiStrength: aiStrength,
-                  onTimeChanged: onTimeChanged,
-                  onStrengthChanged: onStrengthChanged,
+                child: SingleChildScrollView(
+                  child: _ModeChooser(
+                    onOpen: onOpen,
+                    onContinue: onContinue,
+                    onImport: onImport,
+                    currentGame: currentGame,
+                    timeControlSeconds: timeControlSeconds,
+                    aiStrength: aiStrength,
+                    redAiStrength: redAiStrength,
+                    blackAiStrength: blackAiStrength,
+                    onTimeChanged: onTimeChanged,
+                    onStrengthChanged: onStrengthChanged,
+                    onRedStrengthChanged: onRedStrengthChanged,
+                    onBlackStrengthChanged: onBlackStrengthChanged,
+                  ),
                 ),
               ),
             ],
@@ -329,8 +382,12 @@ class _MobileHome extends StatelessWidget {
     required this.currentGame,
     required this.timeControlSeconds,
     required this.aiStrength,
+    required this.redAiStrength,
+    required this.blackAiStrength,
     required this.onTimeChanged,
     required this.onStrengthChanged,
+    required this.onRedStrengthChanged,
+    required this.onBlackStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
@@ -339,8 +396,12 @@ class _MobileHome extends StatelessWidget {
   final GameRecord? currentGame;
   final int timeControlSeconds;
   final AiStrength aiStrength;
+  final AiStrength redAiStrength;
+  final AiStrength blackAiStrength;
   final ValueChanged<int> onTimeChanged;
   final ValueChanged<AiStrength> onStrengthChanged;
+  final ValueChanged<AiStrength> onRedStrengthChanged;
+  final ValueChanged<AiStrength> onBlackStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -357,8 +418,12 @@ class _MobileHome extends StatelessWidget {
             currentGame: currentGame,
             timeControlSeconds: timeControlSeconds,
             aiStrength: aiStrength,
+            redAiStrength: redAiStrength,
+            blackAiStrength: blackAiStrength,
             onTimeChanged: onTimeChanged,
             onStrengthChanged: onStrengthChanged,
+            onRedStrengthChanged: onRedStrengthChanged,
+            onBlackStrengthChanged: onBlackStrengthChanged,
           ),
         ],
       ),
@@ -444,8 +509,12 @@ class _ModeChooser extends StatelessWidget {
     required this.currentGame,
     required this.timeControlSeconds,
     required this.aiStrength,
+    required this.redAiStrength,
+    required this.blackAiStrength,
     required this.onTimeChanged,
     required this.onStrengthChanged,
+    required this.onRedStrengthChanged,
+    required this.onBlackStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
@@ -454,8 +523,12 @@ class _ModeChooser extends StatelessWidget {
   final GameRecord? currentGame;
   final int timeControlSeconds;
   final AiStrength aiStrength;
+  final AiStrength redAiStrength;
+  final AiStrength blackAiStrength;
   final ValueChanged<int> onTimeChanged;
   final ValueChanged<AiStrength> onStrengthChanged;
+  final ValueChanged<AiStrength> onRedStrengthChanged;
+  final ValueChanged<AiStrength> onBlackStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -536,13 +609,69 @@ class _ModeChooser extends StatelessWidget {
               );
             },
           ),
+          const SizedBox(height: 14),
+          Text(
+            'AI 对战强度',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: const Color(0xFF46514D),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              DropdownButtonFormField<AiStrength> strengthField({
+                required String label,
+                required AiStrength strength,
+                required ValueChanged<AiStrength> onChanged,
+              }) => DropdownButtonFormField<AiStrength>(
+                initialValue: strength,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: label,
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: AiStrength.easy, child: Text('入门')),
+                  DropdownMenuItem(value: AiStrength.normal, child: Text('普通')),
+                  DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
+                ],
+                onChanged: (value) {
+                  if (value != null) onChanged(value);
+                },
+              );
+              final redField = strengthField(
+                label: '红方电脑',
+                strength: redAiStrength,
+                onChanged: onRedStrengthChanged,
+              );
+              final blackField = strengthField(
+                label: '黑方电脑',
+                strength: blackAiStrength,
+                onChanged: onBlackStrengthChanged,
+              );
+              if (constraints.maxWidth < 340) {
+                return Column(
+                  children: [redField, const SizedBox(height: 10), blackField],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: redField),
+                  const SizedBox(width: 12),
+                  Expanded(child: blackField),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 18),
           if (currentGame != null) ...[
             _ModeButton(
               icon: Icons.play_arrow,
               title: '继续上局',
               description:
-                  '${currentGame!.mode == GamePlayMode.ai ? '人机对局' : '本地双人'} · ${currentGame!.moves.length} 步',
+                  '${_gamePlayModeLabel(currentGame!.mode)} · ${currentGame!.moves.length} 步',
               emphasized: true,
               onTap: () => onContinue(currentGame!),
             ),
@@ -554,6 +683,14 @@ class _ModeChooser extends StatelessWidget {
             description: '执红先行，与本地引擎对弈',
             emphasized: currentGame == null,
             onTap: () => onOpen(PlayMode.withAI),
+          ),
+          const SizedBox(height: 12),
+          _ModeButton(
+            icon: Icons.smart_toy,
+            title: 'AI 对战',
+            description:
+                '红方 ${_strengthLabel(redAiStrength)} · 黑方 ${_strengthLabel(blackAiStrength)}',
+            onTap: () => onOpen(PlayMode.withAIvsAI),
           ),
           const SizedBox(height: 12),
           _ModeButton(

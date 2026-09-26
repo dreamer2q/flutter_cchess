@@ -17,6 +17,8 @@ void main() {
     redElapsedMs: 1200,
     blackElapsedMs: 800,
     aiStrength: AiStrength.hard,
+    redAiStrength: AiStrength.easy,
+    blackAiStrength: AiStrength.normal,
     aiMaxDepth: 7,
     aiMaxThinkMs: 1900,
   );
@@ -35,11 +37,29 @@ void main() {
   test('legacy records inherit the selected difficulty limits', () {
     final legacy = record.toJson()
       ..remove('aiMaxDepth')
-      ..remove('aiMaxThinkMs');
+      ..remove('aiMaxThinkMs')
+      ..remove('redAiStrength')
+      ..remove('blackAiStrength');
 
     final migrated = GameRecord.fromJson(legacy);
     expect(migrated.aiMaxDepth, AiStrength.hard.maxDepth);
     expect(migrated.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
+    expect(migrated.redAiStrength, AiStrength.hard);
+    expect(migrated.blackAiStrength, AiStrength.hard);
+  });
+
+  test('AI-vs-AI records retain mode and independent side strengths', () {
+    final duel = record.copyWith(
+      mode: GamePlayMode.aiVsAi,
+      redAiStrength: AiStrength.easy,
+      blackAiStrength: AiStrength.hard,
+    );
+
+    final restored = GameRecord.decode(duel.encode());
+    expect(restored.mode, GamePlayMode.aiVsAi);
+    expect(restored.redAiStrength, AiStrength.easy);
+    expect(restored.blackAiStrength, AiStrength.hard);
+    expect(restored, duel);
   });
 
   test('old strong-game settings are migrated to a bounded search budget', () {
