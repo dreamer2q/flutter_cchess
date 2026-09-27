@@ -65,6 +65,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   int _taskGeneration = 0;
   int _effectSequence = 0;
   int _persistenceRevision = 0;
+  bool _aiVsAiSearchPending = false;
   Future<void> _saveTail = Future<void>.value();
   GameClock? _clock;
   StreamSubscription<int>? _clockTicks;
@@ -84,6 +85,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     Emitter<ChessState> emit,
   ) async {
     _taskGeneration++;
+    _aiVsAiSearchPending = false;
     emit(
       state.copyWith(
         timeControlSeconds: event.timeControlSeconds,
@@ -92,11 +94,32 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         aiStrength: event.aiStrength,
         aiMaxDepth: event.resolvedAiMaxDepth,
         aiMaxThinkMs: event.resolvedAiMaxThinkMs,
+        redAiMaxDepth:
+            event.redAiMaxDepth ??
+            (event.playMode == PlayMode.withAIvsAI
+                ? (event.redAiStrength ?? event.aiStrength).maxDepth
+                : event.resolvedAiMaxDepth),
+        blackAiMaxDepth:
+            event.blackAiMaxDepth ??
+            (event.playMode == PlayMode.withAIvsAI
+                ? (event.blackAiStrength ?? event.aiStrength).maxDepth
+                : event.resolvedAiMaxDepth),
+        aiVsAiStepDelayMs: event.aiVsAiStepDelayMs,
       ),
     );
     try {
       switch (event.playMode) {
         case PlayMode.withAI:
+          _engine = _providedEngine ?? ChessEngine();
+          await _engine!.setOpeningBook(event.openingBookLines);
+          await _engine!.setStrength(
+            event.aiStrength,
+            maxDepth: event.resolvedAiMaxDepth,
+            maxThinkMs: event.resolvedAiMaxThinkMs,
+          );
+          await _engine!.restore(event.initialBoard.lastMoves.map((m) => m.mv));
+          break;
+        case PlayMode.withAIvsAI:
           _engine = _providedEngine ?? ChessEngine();
           await _engine!.setOpeningBook(event.openingBookLines);
           await _engine!.setStrength(
@@ -114,8 +137,9 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       }
 
       final aiTurn =
-          event.playMode == PlayMode.withAI &&
-          !event.initialBoard.isTurn(PlaySide.red);
+          event.playMode == PlayMode.withAIvsAI ||
+          (event.playMode == PlayMode.withAI &&
+              !event.initialBoard.isTurn(PlaySide.red));
       _clock = GameClock(
         timeControlSeconds: event.timeControlSeconds,
         redElapsedMs: event.redElapsedMs,
@@ -142,8 +166,21 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           redElapsedMs: event.redElapsedMs,
           blackElapsedMs: event.blackElapsedMs,
           aiStrength: event.aiStrength,
+          redAiStrength: event.redAiStrength ?? event.aiStrength,
+          blackAiStrength: event.blackAiStrength ?? event.aiStrength,
           aiMaxDepth: event.resolvedAiMaxDepth,
           aiMaxThinkMs: event.resolvedAiMaxThinkMs,
+          redAiMaxDepth:
+              event.redAiMaxDepth ??
+              (event.playMode == PlayMode.withAIvsAI
+                  ? (event.redAiStrength ?? event.aiStrength).maxDepth
+                  : event.resolvedAiMaxDepth),
+          blackAiMaxDepth:
+              event.blackAiMaxDepth ??
+              (event.playMode == PlayMode.withAIvsAI
+                  ? (event.blackAiStrength ?? event.aiStrength).maxDepth
+                  : event.resolvedAiMaxDepth),
+          aiVsAiStepDelayMs: event.aiVsAiStepDelayMs,
         ),
       );
       if (_clock!.isExpired(event.initialBoard.innerBoard.sdPlayer)) {
@@ -157,7 +194,13 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
             .listen((_) => add(const _ChessEventClockTick()));
       }
       _queuePersist(event.initialBoard);
-      if (aiTurn) _requestAiMove(fromRestoredPosition: true);
+      if (aiTurn) {
+        if (event.playMode == PlayMode.withAIvsAI) {
+          _requestAiVsAiMove();
+        } else {
+          _requestAiMove(fromRestoredPosition: true);
+        }
+      }
     } catch (error, stackTrace) {
       addError(error, stackTrace);
       emit(
@@ -234,6 +277,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     MovePos move,
     Emitter<ChessState> emit, {
     required bool requestAi,
+    bool requestAiVsAi = false,
     bool keepPaused = false,
   }) {
     final before = state.board;
@@ -276,7 +320,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         ? GamePhase.paused
         : finished
         ? GamePhase.finished
-        : requestAi
+        : requestAi || requestAiVsAi
         ? GamePhase.aiThinking
         : GamePhase.playerTurn;
     _clock?.stop();
@@ -303,6 +347,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     _queuePersist(after);
     if (requestAi && !finished) {
       _requestAiMove(humanMove: move.mv);
+    } else if (requestAiVsAi && !finished && !keepPaused) {
+      _requestAiVsAiMove(respectStepDelay: true);
     }
   }
 
@@ -485,11 +531,57 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     );
   }
 
+  void _requestAiVsAiMove({bool respectStepDelay = false}) {
+    final engine = _engine;
+    if (engine == null || state.playMode != PlayMode.withAIvsAI) return;
+    final side = state.board.innerBoard.sdPlayer == PlaySide.red.index
+        ? PlaySide.red
+        : PlaySide.black;
+    final strength = side == PlaySide.red
+        ? state.redAiStrength
+        : state.blackAiStrength;
+    final maxDepth = side == PlaySide.red
+        ? state.redAiMaxDepth
+        : state.blackAiMaxDepth;
+    final generation = ++_taskGeneration;
+    _aiVsAiSearchPending = true;
+    unawaited(
+      () async {
+        if (respectStepDelay && state.aiVsAiStepDelayMs > 0) {
+          await Future<void>.delayed(
+            Duration(milliseconds: state.aiVsAiStepDelayMs),
+          );
+        }
+        if (generation != _taskGeneration ||
+            state.playMode != PlayMode.withAIvsAI ||
+            state.phase == GamePhase.paused) {
+          _aiVsAiSearchPending = false;
+          return null;
+        }
+        await engine.setStrength(strength, maxDepth: maxDepth);
+        return engine.requestAndMakeMove();
+      }().then(
+        (mv) {
+          if (mv != null) {
+            add(_ChessEventAiResolved(generation, MovePos.mv(mv), null));
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          addError(error, stackTrace);
+          add(_ChessEventAiResolved(generation, null, error));
+        },
+      ),
+    );
+  }
+
   void _onAiResolved(_ChessEventAiResolved event, Emitter<ChessState> emit) {
     if (event.generation != _taskGeneration ||
-        state.playMode != PlayMode.withAI) {
+        (state.playMode != PlayMode.withAI &&
+            state.playMode != PlayMode.withAIvsAI)) {
       return;
     }
+    final aiVsAi = state.playMode == PlayMode.withAIvsAI;
+    if (aiVsAi) _aiVsAiSearchPending = false;
     if (event.error != null || event.move == null) {
       _clock?.stop();
       final clock = _clockSnapshot;
@@ -507,6 +599,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       event.move!,
       emit,
       requestAi: false,
+      requestAiVsAi: aiVsAi,
       keepPaused: state.phase == GamePhase.paused,
     );
   }
@@ -531,19 +624,26 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     final target =
         state.winningSide != null || state.playStatus == PlayStatus.draw
         ? GamePhase.finished
-        : state.playMode == PlayMode.withAI &&
-              !state.board.isTurn(state.playSide)
+        : (state.playMode == PlayMode.withAI &&
+                  !state.board.isTurn(state.playSide) ||
+              state.playMode == PlayMode.withAIvsAI)
         ? GamePhase.aiThinking
         : GamePhase.playerTurn;
     if (target != GamePhase.finished) {
       _clock?.start(state.board.innerBoard.sdPlayer);
     }
     emit(state.copyWith(phase: target));
+    if (target == GamePhase.aiThinking &&
+        state.playMode == PlayMode.withAIvsAI &&
+        !_aiVsAiSearchPending) {
+      _requestAiVsAiMove();
+    }
   }
 
   void _onResigned(ChessEventResign event, Emitter<ChessState> emit) {
     if (!state.canResign || state.board.pcPairs.isEmpty) return;
     _taskGeneration++;
+    _aiVsAiSearchPending = false;
     _clock?.stop();
     final clock = _clockSnapshot;
     final resigningSide = state.playMode == PlayMode.withSelf
@@ -582,7 +682,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       await engine.restore(state.board.lastMoves.map((move) => move.mv));
       if (emit.isDone || generation != _taskGeneration) return;
       _clock?.start(state.board.innerBoard.sdPlayer);
-      _requestAiMove(fromRestoredPosition: true);
+      if (state.playMode == PlayMode.withAIvsAI) {
+        _requestAiVsAiMove();
+      } else {
+        _requestAiMove(fromRestoredPosition: true);
+      }
     } catch (error, stackTrace) {
       addError(error, stackTrace);
       if (emit.isDone || generation != _taskGeneration) return;
@@ -601,6 +705,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   ) async {
     if (state.phase != GamePhase.failure) return;
     _taskGeneration++;
+    _aiVsAiSearchPending = false;
     _clock?.start(state.board.innerBoard.sdPlayer);
     emit(
       state.copyWith(
@@ -670,6 +775,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   void _finishOnTime(int losingSide, Emitter<ChessState> emit) {
     _taskGeneration++;
+    _aiVsAiSearchPending = false;
     _clock?.stop();
     final clock = _clockSnapshot;
     final winner = losingSide == PlaySide.red.index
@@ -752,9 +858,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       moves: board.lastMoves
           .map((move) => GameMove(from: move.sqSrc, to: move.sqDst))
           .toList(growable: false),
-      mode: state.playMode == PlayMode.withSelf
-          ? GamePlayMode.self
-          : GamePlayMode.ai,
+      mode: switch (state.playMode) {
+        PlayMode.withSelf => GamePlayMode.self,
+        PlayMode.withAIvsAI => GamePlayMode.aiVsAi,
+        PlayMode.withAI || PlayMode.withNetwork => GamePlayMode.ai,
+      },
       result: result,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
@@ -762,8 +870,13 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       blackElapsedMs: clock.blackElapsedMs,
       timeControlSeconds: state.timeControlSeconds,
       aiStrength: state.aiStrength,
+      redAiStrength: state.redAiStrength,
+      blackAiStrength: state.blackAiStrength,
       aiMaxDepth: state.aiMaxDepth,
       aiMaxThinkMs: state.aiMaxThinkMs,
+      redAiMaxDepth: state.redAiMaxDepth,
+      blackAiMaxDepth: state.blackAiMaxDepth,
+      aiVsAiStepDelayMs: state.aiVsAiStepDelayMs,
     );
   }
 
@@ -777,6 +890,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   @override
   Future<void> close() async {
     _taskGeneration++;
+    _aiVsAiSearchPending = false;
     await _clockTicks?.cancel();
     _clock?.stop();
     await flushPersistence();

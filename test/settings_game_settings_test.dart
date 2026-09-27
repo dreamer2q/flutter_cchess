@@ -86,8 +86,8 @@ void main() {
   });
 
   test('keeps configured AI budgets within supported device limits', () {
-    expect(AiStrength.hard.maxDepth, 6);
-    expect(AiStrength.hard.maxThinkMs, 1500);
+    expect(AiStrength.hard.maxDepth, 8);
+    expect(AiStrength.hard.maxThinkMs, 2000);
     expect(AiStrength.clampDepth(64), AiStrength.maxConfiguredDepth);
     expect(AiStrength.clampThinkMs(10000), AiStrength.maxConfiguredThinkMs);
   });

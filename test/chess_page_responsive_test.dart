@@ -246,6 +246,9 @@ void main() {
     });
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
+    expect(find.text('AI 对战'), findsOneWidget);
+    expect(find.text('红方电脑'), findsNothing);
+    expect(find.text('黑方电脑'), findsNothing);
     await tester.tap(find.text('15 分钟'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('5 分钟').last);
@@ -258,7 +261,7 @@ void main() {
           .initialValue,
       300,
     );
-    await tester.tap(find.text('普通'));
+    await tester.tap(find.text('普通').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('较强').last);
     await tester.pumpAndSettle();
@@ -282,6 +285,36 @@ void main() {
     expect(bloc.state.aiMaxDepth, AiStrength.hard.maxDepth);
     expect(bloc.state.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
     expect(find.text('05:00'), findsNWidgets(2));
+  });
+
+  testWidgets('AI duel options are shown only when starting an AI duel', (
+    tester,
+  ) async {
+    await setViewport(tester, const Size(390, 844));
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('思考深度'), findsNothing);
+    expect(find.text('每步之间停顿'), findsNothing);
+    await tester.tap(find.text('AI 对战'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('红方电脑'), findsOneWidget);
+    expect(find.text('黑方电脑'), findsOneWidget);
+    expect(find.text('思考深度'), findsNWidgets(2));
+    expect(find.text('每步之间停顿'), findsOneWidget);
+    expect(find.text('开始对战'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<Slider>(find.byType(Slider))
+          .map((slider) => slider.value),
+      [8, 8],
+    );
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChessPage), findsNothing);
   });
 
   testWidgets('notation file opens a local study game', (tester) async {

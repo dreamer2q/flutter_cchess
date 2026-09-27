@@ -1,7 +1,7 @@
 enum AiStrength {
   easy(maxDepth: 3, maxThinkMs: 300),
   normal(maxDepth: 5, maxThinkMs: 1500),
-  hard(maxDepth: 6, maxThinkMs: 1500);
+  hard(maxDepth: 8, maxThinkMs: 2000);
 
   static const int maxConfiguredDepth = 8;
   static const int maxConfiguredThinkMs = 2000;

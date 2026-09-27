@@ -100,6 +100,33 @@ class _NewChessPageState extends State<NewChessPage> {
   }
 
   Future<void> _openGame(PlayMode playMode, GameSettings settings) async {
+    if (playMode == PlayMode.withAIvsAI) {
+      final config = await showDialog<_AiVsAiConfig>(
+        context: context,
+        builder: (_) =>
+            _AiVsAiSetupDialog(initialTimeControlSeconds: _timeControlSeconds),
+      );
+      if (config == null || !mounted) return;
+      setState(() => _timeControlSeconds = config.timeControlSeconds);
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChessPage(
+            playMode: playMode,
+            timeControlSeconds: config.timeControlSeconds,
+            aiStrength: config.redStrength,
+            redAiStrength: config.redStrength,
+            blackAiStrength: config.blackStrength,
+            aiMaxDepth: config.redDepth,
+            aiMaxThinkMs: config.redStrength.maxThinkMs,
+            redAiMaxDepth: config.redDepth,
+            blackAiMaxDepth: config.blackDepth,
+            aiVsAiStepDelayMs: config.stepDelayMs,
+          ),
+        ),
+      );
+      _reloadHome();
+      return;
+    }
     final strength = _selectedStrength ?? settings.aiStrength;
     final usesConfiguredLimits = strength == settings.aiStrength;
     await Navigator.of(context).push(
@@ -121,9 +148,11 @@ class _NewChessPageState extends State<NewChessPage> {
   }
 
   Future<void> _continueGame(GameRecord record) async {
-    final mode = record.mode == GamePlayMode.self
-        ? PlayMode.withSelf
-        : PlayMode.withAI;
+    final mode = switch (record.mode) {
+      GamePlayMode.self => PlayMode.withSelf,
+      GamePlayMode.ai => PlayMode.withAI,
+      GamePlayMode.aiVsAi => PlayMode.withAIvsAI,
+    };
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChessPage(playMode: mode, initialRecord: record),
@@ -201,6 +230,12 @@ class _HomeData {
   final GameRecord? currentGame;
   final GameSettings settings;
 }
+
+String _gamePlayModeLabel(GamePlayMode mode) => switch (mode) {
+  GamePlayMode.self => '本地双人',
+  GamePlayMode.ai => '人机对局',
+  GamePlayMode.aiVsAi => 'AI 对战',
+};
 
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({
@@ -302,15 +337,17 @@ class _DesktopHome extends StatelessWidget {
               const SizedBox(width: 36),
               Expanded(
                 flex: 4,
-                child: _ModeChooser(
-                  onOpen: onOpen,
-                  onContinue: onContinue,
-                  onImport: onImport,
-                  currentGame: currentGame,
-                  timeControlSeconds: timeControlSeconds,
-                  aiStrength: aiStrength,
-                  onTimeChanged: onTimeChanged,
-                  onStrengthChanged: onStrengthChanged,
+                child: SingleChildScrollView(
+                  child: _ModeChooser(
+                    onOpen: onOpen,
+                    onContinue: onContinue,
+                    onImport: onImport,
+                    currentGame: currentGame,
+                    timeControlSeconds: timeControlSeconds,
+                    aiStrength: aiStrength,
+                    onTimeChanged: onTimeChanged,
+                    onStrengthChanged: onStrengthChanged,
+                  ),
                 ),
               ),
             ],
@@ -515,7 +552,9 @@ class _ModeChooser extends StatelessWidget {
                   DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
                 ],
                 onChanged: (value) {
-                  if (value != null) onStrengthChanged(value);
+                  if (value != null) {
+                    onStrengthChanged(value);
+                  }
                 },
               );
               if (constraints.maxWidth < 340) {
@@ -542,7 +581,7 @@ class _ModeChooser extends StatelessWidget {
               icon: Icons.play_arrow,
               title: '继续上局',
               description:
-                  '${currentGame!.mode == GamePlayMode.ai ? '人机对局' : '本地双人'} · ${currentGame!.moves.length} 步',
+                  '${_gamePlayModeLabel(currentGame!.mode)} · ${currentGame!.moves.length} 步',
               emphasized: true,
               onTap: () => onContinue(currentGame!),
             ),
@@ -554,6 +593,13 @@ class _ModeChooser extends StatelessWidget {
             description: '执红先行，与本地引擎对弈',
             emphasized: currentGame == null,
             onTap: () => onOpen(PlayMode.withAI),
+          ),
+          const SizedBox(height: 12),
+          _ModeButton(
+            icon: Icons.smart_toy,
+            title: 'AI 对战',
+            description: '红方电脑 · 黑方电脑',
+            onTap: () => onOpen(PlayMode.withAIvsAI),
           ),
           const SizedBox(height: 12),
           _ModeButton(
@@ -589,6 +635,190 @@ class _ModeChooser extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AiVsAiConfig {
+  const _AiVsAiConfig({
+    required this.timeControlSeconds,
+    required this.redStrength,
+    required this.redDepth,
+    required this.blackStrength,
+    required this.blackDepth,
+    required this.stepDelayMs,
+  });
+
+  final int timeControlSeconds;
+  final AiStrength redStrength;
+  final int redDepth;
+  final AiStrength blackStrength;
+  final int blackDepth;
+  final int stepDelayMs;
+}
+
+class _AiVsAiSetupDialog extends StatefulWidget {
+  const _AiVsAiSetupDialog({required this.initialTimeControlSeconds});
+
+  final int initialTimeControlSeconds;
+
+  @override
+  State<_AiVsAiSetupDialog> createState() => _AiVsAiSetupDialogState();
+}
+
+class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
+  late int _timeControlSeconds = widget.initialTimeControlSeconds;
+  AiStrength _redStrength = AiStrength.hard;
+  int _redDepth = AiStrength.maxConfiguredDepth;
+  AiStrength _blackStrength = AiStrength.hard;
+  int _blackDepth = AiStrength.maxConfiguredDepth;
+  int _stepDelayMs = 800;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('AI 对战'),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.58,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: _timeControlSeconds,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '每方用时',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 300, child: Text('5 分钟')),
+                  DropdownMenuItem(value: 600, child: Text('10 分钟')),
+                  DropdownMenuItem(value: 900, child: Text('15 分钟')),
+                  DropdownMenuItem(value: 1800, child: Text('30 分钟')),
+                  DropdownMenuItem(value: 0, child: Text('不限时')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _timeControlSeconds = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 18),
+              _sideControls(
+                title: '红方电脑',
+                strength: _redStrength,
+                depth: _redDepth,
+                onStrengthChanged: (value) =>
+                    setState(() => _redStrength = value),
+                onDepthChanged: (value) => setState(() => _redDepth = value),
+              ),
+              Divider(color: theme.colorScheme.outlineVariant),
+              _sideControls(
+                title: '黑方电脑',
+                strength: _blackStrength,
+                depth: _blackDepth,
+                onStrengthChanged: (value) =>
+                    setState(() => _blackStrength = value),
+                onDepthChanged: (value) => setState(() => _blackDepth = value),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: _stepDelayMs,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '每步之间停顿',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('无停顿')),
+                  DropdownMenuItem(value: 400, child: Text('0.4 秒')),
+                  DropdownMenuItem(value: 800, child: Text('0.8 秒')),
+                  DropdownMenuItem(value: 1200, child: Text('1.2 秒')),
+                  DropdownMenuItem(value: 1800, child: Text('1.8 秒')),
+                  DropdownMenuItem(value: 2500, child: Text('2.5 秒')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _stepDelayMs = value);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton.icon(
+          onPressed: () => Navigator.pop(
+            context,
+            _AiVsAiConfig(
+              timeControlSeconds: _timeControlSeconds,
+              redStrength: _redStrength,
+              redDepth: _redDepth,
+              blackStrength: _blackStrength,
+              blackDepth: _blackDepth,
+              stepDelayMs: _stepDelayMs,
+            ),
+          ),
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('开始对战'),
+        ),
+      ],
+    );
+  }
+
+  Widget _sideControls({
+    required String title,
+    required AiStrength strength,
+    required int depth,
+    required ValueChanged<AiStrength> onStrengthChanged,
+    required ValueChanged<int> onDepthChanged,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<AiStrength>(
+          initialValue: strength,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '电脑强度',
+            border: OutlineInputBorder(),
+          ),
+          items: const [
+            DropdownMenuItem(value: AiStrength.easy, child: Text('入门')),
+            DropdownMenuItem(value: AiStrength.normal, child: Text('普通')),
+            DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              onStrengthChanged(value);
+            }
+          },
+        ),
+        const SizedBox(height: 4),
+        Row(children: [const Text('思考深度'), const Spacer(), Text('$depth 层')]),
+        Slider(
+          value: depth.toDouble(),
+          min: 1,
+          max: AiStrength.maxConfiguredDepth.toDouble(),
+          divisions: AiStrength.maxConfiguredDepth - 1,
+          label: '$depth 层',
+          onChanged: (value) => onDepthChanged(value.round()),
+        ),
+      ],
     );
   }
 }
