@@ -297,16 +297,23 @@ void main() {
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('思考深度'), findsNothing);
-    expect(find.text('每步之间停顿'), findsNothing);
+    expect(find.text('高级设置'), findsNothing);
+    expect(find.text('落子间隔'), findsNothing);
     await tester.tap(find.text('AI 对战'));
     await tester.pumpAndSettle();
 
     expect(find.text('红方电脑'), findsOneWidget);
     expect(find.text('黑方电脑'), findsOneWidget);
-    expect(find.text('思考深度'), findsNWidgets(2));
-    expect(find.text('每步之间停顿'), findsOneWidget);
+    expect(find.text('落子间隔'), findsOneWidget);
+    expect(find.text('高级设置'), findsOneWidget);
+    expect(find.textContaining('每步最多'), findsNothing);
+    expect(find.text('红方搜索深度'), findsNothing);
     expect(find.text('开始对战'), findsOneWidget);
+    await tester.ensureVisible(find.text('高级设置'));
+    await tester.tap(find.text('高级设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('红方搜索深度'), findsOneWidget);
+    expect(find.text('黑方搜索深度'), findsOneWidget);
     expect(
       tester
           .widgetList<Slider>(find.byType(Slider))
