@@ -311,7 +311,7 @@ void main() {
       tester
           .widgetList<Slider>(find.byType(Slider))
           .map((slider) => slider.value),
-      [8, 8],
+      [0, 0],
     );
 
     await tester.tap(find.text('取消'));

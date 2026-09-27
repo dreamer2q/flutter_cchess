@@ -669,9 +669,9 @@ class _AiVsAiSetupDialog extends StatefulWidget {
 class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
   late int _timeControlSeconds = widget.initialTimeControlSeconds;
   AiStrength _redStrength = AiStrength.hard;
-  int _redDepth = AiStrength.maxConfiguredDepth;
+  int _redDepth = AiStrength.automaticDepth;
   AiStrength _blackStrength = AiStrength.hard;
-  int _blackDepth = AiStrength.maxConfiguredDepth;
+  int _blackDepth = AiStrength.automaticDepth;
   int _stepDelayMs = 800;
 
   @override
@@ -809,13 +809,20 @@ class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
           },
         ),
         const SizedBox(height: 4),
-        Row(children: [const Text('思考深度'), const Spacer(), Text('$depth 层')]),
+        Text('每步最多 ${strength.maxThinkMs / 1000} 秒 · 到时返回最佳结果'),
+        Row(
+          children: [
+            const Text('思考深度'),
+            const Spacer(),
+            Text(depth == 0 ? '自动（按时间）' : '$depth 层'),
+          ],
+        ),
         Slider(
           value: depth.toDouble(),
-          min: 1,
+          min: 0,
           max: AiStrength.maxConfiguredDepth.toDouble(),
-          divisions: AiStrength.maxConfiguredDepth - 1,
-          label: '$depth 层',
+          divisions: AiStrength.maxConfiguredDepth,
+          label: depth == 0 ? '自动（按时间）' : '$depth 层',
           onChanged: (value) => onDepthChanged(value.round()),
         ),
       ],

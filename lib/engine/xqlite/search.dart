@@ -14,6 +14,8 @@ class HashItem {
 }
 
 class XqwlSearch {
+  XqwlSearch({Stopwatch? clock}) : _searchClock = clock ?? Stopwatch();
+
   static const bool GEN_CAPTURE = true;
   static const bool NO_NULL = true;
 
@@ -31,7 +33,9 @@ class XqwlSearch {
   int nodesSearched = 0;
   int transpositionCutoffs = 0;
   int completedDepth = 0;
-  final Stopwatch _searchClock = Stopwatch();
+  int get elapsedMs => _searchClock.elapsedMilliseconds;
+  bool get stoppedOnTime => _searchAborted;
+  final Stopwatch _searchClock;
   int _maxThinkMs = 0;
   bool _searchAborted = false;
   int _generation = 0;
@@ -473,10 +477,7 @@ class XqwlSearch {
   }
 
   // 迭代加深搜索过程
-  int evaluatePosition({
-    int maxDepth = XqwlPosition.LIMIT_DEPTH,
-    int maxThinkMs = 5000,
-  }) {
+  int evaluatePosition({int maxDepth = 0, int maxThinkMs = 5000}) {
     searchMain(
       maxDepth: maxDepth,
       maxThinkMs: maxThinkMs,
@@ -486,10 +487,16 @@ class XqwlSearch {
   }
 
   void searchMain({
-    int maxDepth = XqwlPosition.LIMIT_DEPTH,
+    int maxDepth = 0,
     int maxThinkMs = 5000,
     bool useOpeningBook = true,
   }) {
+    if (maxThinkMs <= 0) {
+      throw ArgumentError.value(maxThinkMs, 'maxThinkMs', 'Must be positive');
+    }
+    // Automatic mode has no user-selected depth cap. LIMIT_DEPTH remains a
+    // stack-safety guard, including check extensions and quiescence search.
+    final depthLimit = maxDepth <= 0 ? XqwlPosition.LIMIT_DEPTH : maxDepth;
     _maxThinkMs = maxThinkMs;
     _searchAborted = false;
     nodesSearched = 0;
@@ -556,13 +563,14 @@ class XqwlSearch {
       return;
     }
     if (vl == 0) {
-      scoreResult = pos.inCheck() ? -XqwlPosition.MATE_VALUE : 0;
+      // Xiangqi stalemate is a loss, even when the king is not in check.
+      scoreResult = -XqwlPosition.MATE_VALUE;
       _searchClock.stop();
       return;
     }
 
     // 迭代加深过程
-    for (int i = 1; i <= maxDepth && i <= XqwlPosition.LIMIT_DEPTH; i++) {
+    for (int i = 1; i <= depthLimit && i <= XqwlPosition.LIMIT_DEPTH; i++) {
       final fallbackMove = mvResult;
       vl = searchRoot(i);
       if (_searchAborted) {
@@ -575,8 +583,8 @@ class XqwlSearch {
       if (vl > XqwlPosition.WIN_VALUE || vl < -XqwlPosition.WIN_VALUE) {
         break;
       }
-      // 超过一秒，就终止搜索
-      if (_timeLimitReached) break;
+      // A partial iteration never replaces the last completed move/score.
+      if (_shouldStop()) break;
     }
     _searchClock.stop();
   }

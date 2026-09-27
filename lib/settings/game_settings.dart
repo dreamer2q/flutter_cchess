@@ -29,11 +29,11 @@ class GameSettings {
     this.hapticsEnabled = true,
     this.motionPreference = MotionPreference.system,
     this.aiStrength = AiStrength.normal,
-    this.aiMaxDepth = 5,
+    this.aiMaxDepth = AiStrength.automaticDepth,
     this.aiMaxThinkMs = 1500,
   });
 
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
   static const String defaultThemeConfigAsset =
       'assets/skins/woods/config.json';
 
@@ -87,6 +87,7 @@ class GameSettings {
     if (version != null &&
         version != 1 &&
         version != 2 &&
+        version != 3 &&
         version != schemaVersion) {
       throw FormatException('Unsupported settings schema version: $version');
     }
@@ -121,22 +122,20 @@ class GameSettings {
       throw const FormatException('Invalid game settings.');
     }
     if (storedAiMaxDepth is! int ||
-        storedAiMaxDepth < 1 ||
+        storedAiMaxDepth < 0 ||
         storedAiMaxDepth > 64 ||
         storedAiMaxThinkMs is! int ||
         storedAiMaxThinkMs < 100 ||
         storedAiMaxThinkMs > 10000) {
       throw const FormatException('Invalid AI settings.');
     }
-    final legacyHardDefault = AiStrength.isLegacyHardDefault(
-      strength: aiStrength,
-      maxDepth: storedAiMaxDepth,
-      maxThinkMs: storedAiMaxThinkMs,
-    );
-    final aiMaxDepth = legacyHardDefault
+    final legacyPreset =
+        version != schemaVersion &&
+        aiStrength.isLegacyPreset(storedAiMaxDepth, storedAiMaxThinkMs);
+    final aiMaxDepth = legacyPreset
         ? aiStrength.maxDepth
         : AiStrength.clampDepth(storedAiMaxDepth);
-    final aiMaxThinkMs = legacyHardDefault
+    final aiMaxThinkMs = legacyPreset
         ? aiStrength.maxThinkMs
         : AiStrength.clampThinkMs(storedAiMaxThinkMs);
 

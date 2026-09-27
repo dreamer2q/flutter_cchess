@@ -417,24 +417,6 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
             ),
           Row(
             children: [
-              const Expanded(child: Text('搜索深度上限')),
-              Text('$depth 层'),
-            ],
-          ),
-          Slider(
-            value: _depth,
-            min: 1,
-            max: AiStrength.maxConfiguredDepth.toDouble(),
-            divisions: AiStrength.maxConfiguredDepth - 1,
-            label: '$depth 层',
-            onChanged: (value) => setState(() => _depth = value),
-            onChangeEnd: (value) => widget.onUpdate(
-              widget.settings.copyWith(aiMaxDepth: value.round()),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
               const Expanded(child: Text('每步思考上限')),
               Text(_formatThinkTime(thinkMs)),
             ],
@@ -451,10 +433,30 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
             ),
           ),
           Text(
-            '设置的是搜索上限；局面简单时电脑可能更快落子。',
+            '在每步时间内自动加深搜索，到时采用最后完成的结果。命中开局库、只有一步可走或搜到胜负时会提前落子。',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: const Color(0xFF68716E)),
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('高级：限制搜索深度'),
+            subtitle: Text(
+              depth == 0 ? '自动 · 按时间搜索（推荐）' : '最多 $depth 层，可能提前落子',
+            ),
+            children: [
+              Slider(
+                value: _depth,
+                min: 0,
+                max: AiStrength.maxConfiguredDepth.toDouble(),
+                divisions: AiStrength.maxConfiguredDepth,
+                label: depth == 0 ? '自动' : '$depth 层',
+                onChanged: (value) => setState(() => _depth = value),
+                onChangeEnd: (value) => widget.onUpdate(
+                  widget.settings.copyWith(aiMaxDepth: value.round()),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -141,6 +141,7 @@ class GameRecord {
     'blackElapsedMs': blackElapsedMs,
     'timeControlSeconds': timeControlSeconds,
     'aiStrength': aiStrength.name,
+    'aiSearchVersion': 1,
     'redAiStrength': redAiStrength.name,
     'blackAiStrength': blackAiStrength.name,
     'aiMaxDepth': aiMaxDepth,
@@ -196,31 +197,30 @@ class GameRecord {
         timeControlSeconds is! int ||
         timeControlSeconds < 0 ||
         storedAiMaxDepth is! int ||
-        storedAiMaxDepth < 1 ||
+        storedAiMaxDepth < 0 ||
         storedAiMaxDepth > 64 ||
         storedAiMaxThinkMs is! int ||
         storedAiMaxThinkMs < 100 ||
         storedAiMaxThinkMs > 10000 ||
         storedRedAiMaxDepth is! int ||
-        storedRedAiMaxDepth < 1 ||
+        storedRedAiMaxDepth < 0 ||
         storedRedAiMaxDepth > 64 ||
         storedBlackAiMaxDepth is! int ||
-        storedBlackAiMaxDepth < 1 ||
+        storedBlackAiMaxDepth < 0 ||
         storedBlackAiMaxDepth > 64 ||
         aiVsAiStepDelayMs is! int ||
         aiVsAiStepDelayMs < 0 ||
         aiVsAiStepDelayMs > 5000) {
       throw const FormatException('Invalid game record.');
     }
-    final legacyHardDefault = AiStrength.isLegacyHardDefault(
-      strength: aiStrength,
-      maxDepth: storedAiMaxDepth,
-      maxThinkMs: storedAiMaxThinkMs,
-    );
-    final aiMaxDepth = legacyHardDefault
+    final legacySearch = json['aiSearchVersion'] == null;
+    final legacyPreset =
+        legacySearch &&
+        aiStrength.isLegacyPreset(storedAiMaxDepth, storedAiMaxThinkMs);
+    final aiMaxDepth = legacyPreset
         ? aiStrength.maxDepth
         : AiStrength.clampDepth(storedAiMaxDepth);
-    final aiMaxThinkMs = legacyHardDefault
+    final aiMaxThinkMs = legacyPreset
         ? aiStrength.maxThinkMs
         : AiStrength.clampThinkMs(storedAiMaxThinkMs);
     final createdAt = DateTime.tryParse(createdAtValue);
@@ -253,8 +253,14 @@ class GameRecord {
       blackAiStrength: blackAiStrength,
       aiMaxDepth: aiMaxDepth,
       aiMaxThinkMs: aiMaxThinkMs,
-      redAiMaxDepth: AiStrength.clampDepth(storedRedAiMaxDepth),
-      blackAiMaxDepth: AiStrength.clampDepth(storedBlackAiMaxDepth),
+      redAiMaxDepth:
+          legacySearch && storedRedAiMaxDepth == redAiStrength.legacyDepth
+          ? AiStrength.automaticDepth
+          : AiStrength.clampDepth(storedRedAiMaxDepth),
+      blackAiMaxDepth:
+          legacySearch && storedBlackAiMaxDepth == blackAiStrength.legacyDepth
+          ? AiStrength.automaticDepth
+          : AiStrength.clampDepth(storedBlackAiMaxDepth),
       aiVsAiStepDelayMs: aiVsAiStepDelayMs,
     );
   }
