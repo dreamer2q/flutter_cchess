@@ -39,14 +39,21 @@ class XqwlSearch {
   int _maxThinkMs = 0;
   bool _searchAborted = false;
   int _generation = 0;
+  final List<List<int>> _moveBuffers = List.generate(
+    XqwlPosition.LIMIT_DEPTH + 1,
+    (_) => <int>[],
+  );
 
   final pos = XqwlPosition();
 
   bool get _timeLimitReached =>
       _maxThinkMs > 0 && _searchClock.elapsedMilliseconds >= _maxThinkMs;
 
-  bool _shouldStop() {
+  bool _shouldStop([bool forceClockCheck = false]) {
     if (_searchAborted) return true;
+    // Every root move is checked; inside the tree, one clock read per 64
+    // visited nodes keeps the deadline responsive without dominating search.
+    if (!forceClockCheck && (nodesSearched & 63) != 0) return false;
     if (_timeLimitReached) {
       _searchAborted = true;
       return true;
@@ -211,7 +218,7 @@ class XqwlSearch {
     nodesSearched++;
     int i, nGenMoves;
     int vl, vlBest;
-    List<int> mvs = [];
+    final mvs = _moveBuffers[pos.nDistance];
     // 一个静态搜索分为以下几个阶段
 
     // 1. 检查重复局面
@@ -441,7 +448,7 @@ class XqwlSearch {
     SortStruct sort = SortStruct.init(this, mvResult);
 
     while ((mv = sort.next()) != 0) {
-      if (_shouldStop()) return vlBest;
+      if (_shouldStop(true)) return vlBest;
       if (pos.makeMove(mv)) {
         nNewDepth = pos.inCheck() ? nDepth : nDepth - 1;
         if (vlBest == -XqwlPosition.MATE_VALUE) {
@@ -463,7 +470,7 @@ class XqwlSearch {
           }
         }
         pos.undoMakeMove();
-        if (_shouldStop()) return vlBest;
+        if (_shouldStop(true)) return vlBest;
         if (vl > vlBest) {
           vlBest = vl;
           mvResult = mv;
@@ -514,7 +521,7 @@ class XqwlSearch {
       _searchClock.stop();
       return;
     }
-    List<int> mvs = [];
+    final mvs = _moveBuffers[0];
 
     // 初始化
     nHistoryTable = List.filled(65536, 0); // 清空历史表
@@ -539,12 +546,24 @@ class XqwlSearch {
     // 检查是否只有唯一走法
     int vl = 0;
     var fallbackMove = 0;
+    var fallbackScore = -XqwlPosition.MATE_VALUE;
+    var hasHashMove = false;
     mvResult = 0;
     int nGenMoves = pos.generateMoves(mvs);
+    final hashMove = [0];
+    probeHash(-XqwlPosition.MATE_VALUE, XqwlPosition.MATE_VALUE, 1, hashMove);
     for (int i = 0; i < nGenMoves; i++) {
       if (pos.makeMove(mvs[i])) {
+        final score = -pos.evaluate();
         pos.undoMakeMove();
-        fallbackMove = mvs[i];
+        if (mvs[i] == hashMove[0]) {
+          hasHashMove = true;
+          fallbackMove = mvs[i];
+        } else if (!hasHashMove &&
+            (score > fallbackScore || fallbackMove == 0)) {
+          fallbackScore = score;
+          fallbackMove = mvs[i];
+        }
         vl++;
       }
     }
@@ -584,7 +603,7 @@ class XqwlSearch {
         break;
       }
       // A partial iteration never replaces the last completed move/score.
-      if (_shouldStop()) break;
+      if (_shouldStop(true)) break;
     }
     _searchClock.stop();
   }
@@ -605,12 +624,13 @@ class SortStruct {
   int nPhase = 0;
   int nIndex = 0;
   int nGenMoves = 0;
-  List<int> mvs = [];
+  late List<int> mvs;
   bool _capturesGenerated = false;
   bool _quietsGenerated = false;
   final XqwlSearch s;
 
   SortStruct.init(this.s, int mvHash_) {
+    mvs = s._moveBuffers[s.pos.nDistance];
     mvHash = mvHash_;
     mvKiller1 = s.mvKillers[s.pos.nDistance][0];
     mvKiller2 = s.mvKillers[s.pos.nDistance][1];

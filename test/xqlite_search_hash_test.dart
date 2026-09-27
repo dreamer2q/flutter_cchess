@@ -2,6 +2,11 @@ import 'package:flutter_cchess/engine/xqlite/position.dart';
 import 'package:flutter_cchess/engine/xqlite/search.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _ExpiredClock extends Stopwatch {
+  @override
+  int get elapsedMilliseconds => 1;
+}
+
 void main() {
   test('transposition table respects depth and alpha-beta bounds', () {
     final search = XqwlSearch();
@@ -62,5 +67,23 @@ void main() {
 
     expect(search.mvResult, isNot(0));
     expect(search.pos.legalMove(search.mvResult), isTrue);
+  });
+
+  test('root reuses the cached legal move when time expires before depth one', () {
+    final search = XqwlSearch(clock: _ExpiredClock());
+    final moves = <int>[];
+    search.pos.generateMoves(moves);
+    final cachedMove = moves.firstWhere((move) {
+      if (!search.pos.makeMove(move)) return false;
+      search.pos.undoMakeMove();
+      return true;
+    });
+    search.recordHash(XqwlPosition.HASH_PV, 0, 1, cachedMove);
+
+    search.searchMain(maxThinkMs: 1, useOpeningBook: false);
+
+    expect(search.completedDepth, 0);
+    expect(search.mvResult, cachedMove);
+    expect(search.pos.makeMove(search.mvResult), isTrue);
   });
 }
