@@ -144,8 +144,7 @@ class XqwlSearch {
   void recordHash(int nFlag, int vl, int nDepth, int mv) {
     final index = pos.zobr.dwKey & (XqwlPosition.HASH_SIZE - 1);
     final hsh = hashTable[index];
-    final samePosition =
-        hsh.valid &&
+    final samePosition = hsh.valid &&
         hsh.dwLock0 == pos.zobr.dwLock0 &&
         hsh.dwLock1 == pos.zobr.dwLock1;
     if (samePosition && hsh.ucDepth > nDepth) {
@@ -497,6 +496,8 @@ class XqwlSearch {
     int maxDepth = 0,
     int maxThinkMs = 5000,
     bool useOpeningBook = true,
+    int preferredMove = 0,
+    void Function(int move, int depth)? onCompletedDepth,
   }) {
     if (maxThinkMs <= 0) {
       throw ArgumentError.value(maxThinkMs, 'maxThinkMs', 'Must be positive');
@@ -556,7 +557,10 @@ class XqwlSearch {
       if (pos.makeMove(mvs[i])) {
         final score = -pos.evaluate();
         pos.undoMakeMove();
-        if (mvs[i] == hashMove[0]) {
+        if (mvs[i] == preferredMove) {
+          hasHashMove = true;
+          fallbackMove = mvs[i];
+        } else if (preferredMove == 0 && mvs[i] == hashMove[0]) {
           hasHashMove = true;
           fallbackMove = mvs[i];
         } else if (!hasHashMove &&
@@ -598,6 +602,7 @@ class XqwlSearch {
       }
       completedDepth = i;
       scoreResult = vl;
+      onCompletedDepth?.call(mvResult, i);
       // 搜索到杀棋，就终止搜索
       if (vl > XqwlPosition.WIN_VALUE || vl < -XqwlPosition.WIN_VALUE) {
         break;

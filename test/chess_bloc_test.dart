@@ -116,6 +116,40 @@ void main() {
     await bloc.close();
   });
 
+  test('AI receives a clock-based budget when restored on its turn', () async {
+    final initial = FenUtil.parse(initialFenString);
+    final humanMove = initial.getMoves().first;
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    bloc.add(
+      ChessEventInitialized(
+        initialBoard: _apply(initial, humanMove),
+        aiStrength: AiStrength.hard,
+        blackElapsedMs: 870000,
+        timeControlSeconds: 900,
+      ),
+    );
+    await _waitFor(bloc, (state) => engine.requestedAutoThinkMs.isNotEmpty);
+    expect(engine.requestedAutoThinkMs.single, 1000);
+    await bloc.close();
+  });
+
+  test('pondering follows the human turn and stops while paused', () async {
+    final engine = ControlledChessEngine();
+    final bloc = _bloc(engine: engine);
+    await _initialize(bloc, PlayMode.withAI);
+    expect(engine.ponderStarts, 1);
+
+    bloc.add(const ChessEventPause());
+    await _waitFor(bloc, (state) => state.phase == GamePhase.paused);
+    expect(engine.ponderStops, 1);
+
+    bloc.add(const ChessEventResume());
+    await _waitFor(bloc, (state) => state.phase == GamePhase.playerTurn);
+    expect(engine.ponderStarts, 2);
+    await bloc.close();
+  });
+
   test(
     'AI position score uses Red perspective and clears after a move',
     () async {
@@ -177,7 +211,7 @@ void main() {
     await _waitFor(bloc, (state) => engine.requestedAutoStrengths.length == 1);
     expect(engine.requestedAutoStrengths, [AiStrength.easy]);
     expect(engine.requestedAutoDepths, [4]);
-    expect(engine.requestedAutoThinkMs, [AiStrength.easy.maxThinkMs]);
+    expect(engine.requestedAutoThinkMs, [2400]);
     expect(bloc.state.canInteractBoard, isFalse);
 
     bloc.add(ChessEventMoveRequested(redMove));
@@ -605,6 +639,9 @@ class ControlledChessEngine implements ChessEnginePort {
   final List<AiStrength> requestedAutoStrengths = <AiStrength>[];
   final List<int> requestedAutoDepths = <int>[];
   final List<int> requestedAutoThinkMs = <int>[];
+  final List<int> requestedReplyThinkMs = <int>[];
+  int ponderStarts = 0;
+  int ponderStops = 0;
   final List<Completer<int>> _aiVsAiMoves = <Completer<int>>[];
   Completer<int>? _activeAiVsAiMove;
   bool disposed = false;
@@ -627,7 +664,11 @@ class ControlledChessEngine implements ChessEnginePort {
   }
 
   @override
-  Future<int> makeMove(int mv) => makeMoveCompleter.future;
+  Future<int> makeMove(int mv, {int? maxThinkMs}) {
+    requestedReplyThinkMs.add(maxThinkMs ?? this.maxThinkMs);
+    return makeMoveCompleter.future;
+  }
+
   @override
   Future<int> requestMove() => hintCompleter.future;
   @override
@@ -644,10 +685,10 @@ class ControlledChessEngine implements ChessEnginePort {
   }
 
   @override
-  Future<int> requestAndMakeMove() {
+  Future<int> requestAndMakeMove({int? maxThinkMs}) {
     requestedAutoStrengths.add(strength);
     requestedAutoDepths.add(maxDepth);
-    requestedAutoThinkMs.add(maxThinkMs);
+    requestedAutoThinkMs.add(maxThinkMs ?? this.maxThinkMs);
     if (_aiVsAiMoves.isNotEmpty) {
       _activeAiVsAiMove = _aiVsAiMoves.removeAt(0);
       return _activeAiVsAiMove!.future;
@@ -656,6 +697,19 @@ class ControlledChessEngine implements ChessEnginePort {
   }
 
   void queueAiVsAiMove() => _aiVsAiMoves.add(Completer<int>());
+
+  @override
+  void startPonder({
+    required List<int> squares,
+    required int sideToMove,
+    required int maxDepth,
+    required int maxThinkMs,
+  }) {
+    ponderStarts++;
+  }
+
+  @override
+  void stopPonder() => ponderStops++;
 
   void completeAiVsAiMove(int move) {
     final completer = _activeAiVsAiMove;
