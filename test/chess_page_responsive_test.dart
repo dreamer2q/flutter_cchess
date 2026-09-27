@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_cchess/chess/theme/board_corner_marker.dart';
 import 'package:flutter_cchess/chess/view/chess_page.dart';
+import 'package:flutter_cchess/chess/view/chess_analysis_page.dart';
 import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
@@ -118,6 +119,112 @@ void main() {
       bloc.state.board.lastMoves.single.sqDst,
       SquareBoard.coordXYFix(0, 8),
     );
+  });
+
+  testWidgets('analysis variation does not change the paused source game', (
+    tester,
+  ) async {
+    await setViewport(tester, const Size(390, 844));
+    await openLocalGame(tester);
+    final sourceBloc = BlocProvider.of<ChessBloc>(
+      tester.element(find.byType(ChessBoard)),
+    );
+    for (
+      var frame = 0;
+      frame < 50 && sourceBloc.state.phase == GamePhase.loading;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(sourceBloc.state.phase, GamePhase.playerTurn);
+
+    await tester.tap(find.text('拆解'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChessAnalysisPage), findsOneWidget);
+    expect(sourceBloc.state.phase, GamePhase.paused);
+    expect(find.text('模拟棋谱'), findsOneWidget);
+    expect(find.text('0/0 手'), findsOneWidget);
+
+    final boardRect = tester.getRect(
+      find.image(const AssetImage('assets/skins/woods/board.jpg')),
+    );
+    Offset intersection(int x, int y) => Offset(
+      boardRect.left + (32.5 + x * 57) * boardRect.width / 521,
+      boardRect.top + (31.5 + y * 57) * boardRect.height / 577,
+    );
+    await tester.tapAt(intersection(0, 9));
+    await tester.pump();
+    await tester.tapAt(intersection(0, 8));
+    await tester.pumpAndSettle();
+    expect(find.text('1/1 手'), findsOneWidget);
+    expect(sourceBloc.state.board.lastMoves, isEmpty);
+
+    await tester.tap(find.byTooltip('回到起点'));
+    await tester.pumpAndSettle();
+    expect(find.text('0/1 手'), findsOneWidget);
+    await tester.tap(find.byTooltip('前进一步'));
+    await tester.pumpAndSettle();
+    expect(find.text('1/1 手'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回对局'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChessAnalysisPage), findsNothing);
+    expect(sourceBloc.state.board.lastMoves, isEmpty);
+    expect(sourceBloc.state.phase, GamePhase.playerTurn);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop analysis keeps the board and notation side by side', (
+    tester,
+  ) async {
+    await setViewport(tester, const Size(1200, 800));
+    await openLocalGame(tester);
+    await tester.tap(find.text('拆解'));
+    await tester.pumpAndSettle();
+
+    final board = tester.getRect(find.byType(ChessBoard));
+    final history = tester.getRect(find.text('模拟棋谱'));
+    expect(board.right, lessThan(history.left));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('AI game can enter analysis and resume its original turn', (
+    tester,
+  ) async {
+    await setViewport(tester, const Size(390, 844));
+    SharedPreferences.setMockInitialValues({
+      SharedPreferencesGameSettingsRepository.storageKey: const GameSettings(
+        soundEnabled: false,
+      ).encode(),
+    });
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('人机对局'));
+    await tester.pumpAndSettle();
+    final sourceBloc = BlocProvider.of<ChessBloc>(
+      tester.element(find.byType(ChessBoard)),
+    );
+    for (
+      var frame = 0;
+      frame < 30 && sourceBloc.state.phase == GamePhase.loading;
+      frame++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(sourceBloc.state.phase, GamePhase.playerTurn);
+
+    await tester.tap(find.text('拆解'));
+    await tester.pumpAndSettle();
+    expect(sourceBloc.state.phase, GamePhase.paused);
+    expect(find.text('模拟棋谱'), findsOneWidget);
+    await tester.tap(find.byTooltip('返回对局'));
+    await tester.pumpAndSettle();
+    expect(sourceBloc.state.phase, GamePhase.playerTurn);
+    expect(sourceBloc.state.playMode, PlayMode.withAI);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('selection uses centered corners without a pointer focus ring', (
