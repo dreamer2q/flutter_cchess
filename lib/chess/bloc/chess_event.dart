@@ -14,8 +14,13 @@ class ChessEventInitialized extends ChessEvent {
     this.redElapsedMs = 0,
     this.blackElapsedMs = 0,
     this.aiStrength = AiStrength.normal,
+    this.redAiStrength,
+    this.blackAiStrength,
     this.aiMaxDepth,
     this.aiMaxThinkMs,
+    this.redAiMaxDepth,
+    this.blackAiMaxDepth,
+    this.aiVsAiStepDelayMs = 0,
     this.openingBookLines = const [],
   });
   final Board initialBoard;
@@ -24,8 +29,13 @@ class ChessEventInitialized extends ChessEvent {
   final int redElapsedMs;
   final int blackElapsedMs;
   final AiStrength aiStrength;
+  final AiStrength? redAiStrength;
+  final AiStrength? blackAiStrength;
   final int? aiMaxDepth;
   final int? aiMaxThinkMs;
+  final int? redAiMaxDepth;
+  final int? blackAiMaxDepth;
+  final int aiVsAiStepDelayMs;
   final List<List<int>> openingBookLines;
   int get resolvedAiMaxDepth => aiMaxDepth ?? aiStrength.maxDepth;
   int get resolvedAiMaxThinkMs => aiMaxThinkMs ?? aiStrength.maxThinkMs;
@@ -37,8 +47,13 @@ class ChessEventInitialized extends ChessEvent {
     redElapsedMs,
     blackElapsedMs,
     aiStrength,
+    redAiStrength,
+    blackAiStrength,
     aiMaxDepth,
     aiMaxThinkMs,
+    redAiMaxDepth,
+    blackAiMaxDepth,
+    aiVsAiStepDelayMs,
     openingBookLines,
   ];
 }

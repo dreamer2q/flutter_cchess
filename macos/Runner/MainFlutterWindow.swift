@@ -5,7 +5,10 @@ class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let minimumWindowSize = NSSize(width: 920, height: 760)
     self.minSize = minimumWindowSize
-    self.appearance = NSAppearance(named: .aqua)
+    self.styleMask.insert(.fullSizeContentView)
+    self.titlebarAppearsTransparent = true
+    self.titleVisibility = .hidden
+    self.titlebarSeparatorStyle = .none
 
     let flutterViewController = FlutterViewController()
     var windowFrame = self.frame

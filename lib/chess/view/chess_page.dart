@@ -34,16 +34,26 @@ class ChessPage extends StatefulWidget {
     this.initialRecord,
     this.timeControlSeconds = 900,
     this.aiStrength = AiStrength.normal,
+    this.redAiStrength = AiStrength.normal,
+    this.blackAiStrength = AiStrength.normal,
     this.aiMaxDepth,
     this.aiMaxThinkMs,
+    this.redAiMaxDepth,
+    this.blackAiMaxDepth,
+    this.aiVsAiStepDelayMs = 0,
   });
 
   final PlayMode playMode;
   final GameRecord? initialRecord;
   final int timeControlSeconds;
   final AiStrength aiStrength;
+  final AiStrength redAiStrength;
+  final AiStrength blackAiStrength;
   final int? aiMaxDepth;
   final int? aiMaxThinkMs;
+  final int? redAiMaxDepth;
+  final int? blackAiMaxDepth;
+  final int aiVsAiStepDelayMs;
 
   @override
   State<ChessPage> createState() => _ChessPageState();
@@ -126,6 +136,12 @@ class _ChessPageState extends State<ChessPage> {
                       blackElapsedMs: widget.initialRecord?.blackElapsedMs ?? 0,
                       aiStrength:
                           widget.initialRecord?.aiStrength ?? widget.aiStrength,
+                      redAiStrength:
+                          widget.initialRecord?.redAiStrength ??
+                          widget.redAiStrength,
+                      blackAiStrength:
+                          widget.initialRecord?.blackAiStrength ??
+                          widget.blackAiStrength,
                       aiMaxDepth:
                           widget.initialRecord?.aiMaxDepth ??
                           widget.aiMaxDepth ??
@@ -138,6 +154,15 @@ class _ChessPageState extends State<ChessPage> {
                           (widget.aiStrength == bootstrap.settings.aiStrength
                               ? bootstrap.settings.aiMaxThinkMs
                               : widget.aiStrength.maxThinkMs),
+                      redAiMaxDepth:
+                          widget.initialRecord?.redAiMaxDepth ??
+                          widget.redAiMaxDepth,
+                      blackAiMaxDepth:
+                          widget.initialRecord?.blackAiMaxDepth ??
+                          widget.blackAiMaxDepth,
+                      aiVsAiStepDelayMs:
+                          widget.initialRecord?.aiVsAiStepDelayMs ??
+                          widget.aiVsAiStepDelayMs,
                       openingBookLines: bootstrap.openingBookLines,
                     ),
                   ),
@@ -395,6 +420,11 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                               playMode: state.playMode,
                               timeControlSeconds: state.timeControlSeconds,
                               aiStrength: state.aiStrength,
+                              redAiStrength: state.redAiStrength,
+                              blackAiStrength: state.blackAiStrength,
+                              redAiMaxDepth: state.redAiMaxDepth,
+                              blackAiMaxDepth: state.blackAiMaxDepth,
+                              aiVsAiStepDelayMs: state.aiVsAiStepDelayMs,
                             ),
                           ),
                         );
@@ -499,6 +529,11 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
           playMode: state.playMode,
           timeControlSeconds: state.timeControlSeconds,
           aiStrength: state.aiStrength,
+          redAiStrength: state.redAiStrength,
+          blackAiStrength: state.blackAiStrength,
+          redAiMaxDepth: state.redAiMaxDepth,
+          blackAiMaxDepth: state.blackAiMaxDepth,
+          aiVsAiStepDelayMs: state.aiVsAiStepDelayMs,
         ),
       ),
     );
@@ -688,34 +723,36 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                   await _requestNewGame(state);
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.flag_outlined, color: Colors.red),
-                title: const Text('认输', style: TextStyle(color: Colors.red)),
-                enabled: state.canResign,
-                onTap: () async {
-                  final resign = await showDialog<bool>(
-                    context: sheetContext,
-                    builder: (dialogContext) => AlertDialog(
-                      title: const Text('确认认输？'),
-                      content: const Text('认输后本局将立即结束。'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(dialogContext, false),
-                          child: const Text('取消'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(dialogContext, true),
-                          child: const Text('认输'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (resign == true && mounted) {
-                    Navigator.pop(sheetContext);
-                    bloc.add(const ChessEventResign());
-                  }
-                },
-              ),
+              if (state.playMode != PlayMode.withAIvsAI)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined, color: Colors.red),
+                  title: const Text('认输', style: TextStyle(color: Colors.red)),
+                  enabled: state.canResign,
+                  onTap: () async {
+                    final resign = await showDialog<bool>(
+                      context: sheetContext,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('确认认输？'),
+                        content: const Text('认输后本局将立即结束。'),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dialogContext, true),
+                            child: const Text('认输'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (resign == true && mounted) {
+                      Navigator.pop(sheetContext);
+                      bloc.add(const ChessEventResign());
+                    }
+                  },
+                ),
             ],
           ),
         ),
@@ -956,8 +993,14 @@ class _PlayerPanel extends StatelessWidget {
         state.phase != GamePhase.paused &&
         state.phase != GamePhase.failure;
     final isPlayer =
-        state.playMode == PlayMode.withSelf || side == state.playSide;
-    final thinking = state.phase == GamePhase.aiThinking && !isPlayer;
+        state.playMode == PlayMode.withSelf ||
+        (state.playMode != PlayMode.withAIvsAI && side == state.playSide);
+    final computer =
+        state.playMode == PlayMode.withAIvsAI ||
+        (state.playMode == PlayMode.withAI && !isPlayer);
+    final thinking =
+        state.phase == GamePhase.aiThinking &&
+        state.board.innerBoard.sdPlayer == side.index;
     final piece = ChessPiece(side == PlaySide.red ? 8 : 16);
     return _GlassSurface(
       child: Padding(
@@ -978,8 +1021,8 @@ class _PlayerPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    state.playMode == PlayMode.withAI && !isPlayer
-                        ? '电脑 · ${_aiStrengthLabel(state)}'
+                    computer
+                        ? '电脑 · ${_aiStrengthLabel(state, side)}'
                         : side == PlaySide.red
                         ? '红方 · 我'
                         : '黑方 · 本地',
@@ -2138,13 +2181,23 @@ Duration _moveDuration(MovePos move) {
 }
 
 String _modeTitle(PlayMode mode) {
-  return mode == PlayMode.withSelf ? '本地双人' : '人机对局';
+  return switch (mode) {
+    PlayMode.withSelf => '本地双人',
+    PlayMode.withAI => '人机对局',
+    PlayMode.withAIvsAI => 'AI 对战',
+    PlayMode.withNetwork => '联网对局',
+  };
 }
 
-String _aiStrengthLabel(ChessState state) {
-  final strength = state.aiStrength;
-  if (state.aiMaxDepth != strength.maxDepth ||
-      state.aiMaxThinkMs != strength.maxThinkMs) {
+String _aiStrengthLabel(ChessState state, PlaySide side) {
+  final strength = state.playMode == PlayMode.withAIvsAI
+      ? side == PlaySide.red
+            ? state.redAiStrength
+            : state.blackAiStrength
+      : state.aiStrength;
+  if (state.playMode != PlayMode.withAIvsAI &&
+      (state.aiMaxDepth != strength.maxDepth ||
+          state.aiMaxThinkMs != strength.maxThinkMs)) {
     return '自定义';
   }
   return switch (strength) {
