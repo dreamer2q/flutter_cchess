@@ -587,6 +587,9 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                               ? _DesktopGameLayout(
                                   state: state,
                                   inspectorTab: _inspectorTab,
+                                  onEvaluate: () => context
+                                      .read<ChessBloc>()
+                                      .add(const ChessEventEvaluatePosition()),
                                   onInspectorTabChanged: (value) {
                                     setState(() => _inspectorTab = value);
                                   },
@@ -599,6 +602,9 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                                   onBack: _requestExit,
                                   onSettings: _showSettings,
                                   onMenu: _showGameMenu,
+                                  onEvaluate: () => context
+                                      .read<ChessBloc>()
+                                      .add(const ChessEventEvaluatePosition()),
                                   onNotation: _showNotation,
                                 ),
                         ),
@@ -776,6 +782,7 @@ class _MobileGameLayout extends StatelessWidget {
     required this.onBack,
     required this.onSettings,
     required this.onMenu,
+    required this.onEvaluate,
     required this.onNotation,
   });
 
@@ -783,6 +790,7 @@ class _MobileGameLayout extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onSettings;
   final VoidCallback onMenu;
+  final VoidCallback onEvaluate;
   final VoidCallback onNotation;
 
   @override
@@ -803,6 +811,10 @@ class _MobileGameLayout extends StatelessWidget {
             compact: true,
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 5, 18, 0),
+          child: _MobilePositionEvaluation(state: state),
+        ),
         const Expanded(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
@@ -813,7 +825,12 @@ class _MobileGameLayout extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: _PlayerPanel(side: PlaySide.red, state: state, compact: true),
         ),
-        _GameCommandBar(state: state, onNotation: onNotation, onMenu: onMenu),
+        _GameCommandBar(
+          state: state,
+          onNotation: onNotation,
+          onMenu: onMenu,
+          onEvaluate: onEvaluate,
+        ),
       ],
     );
   }
@@ -823,6 +840,7 @@ class _DesktopGameLayout extends StatelessWidget {
   const _DesktopGameLayout({
     required this.state,
     required this.inspectorTab,
+    required this.onEvaluate,
     required this.onInspectorTabChanged,
     required this.onBack,
     required this.onSettings,
@@ -831,6 +849,7 @@ class _DesktopGameLayout extends StatelessWidget {
 
   final ChessState state;
   final int inspectorTab;
+  final VoidCallback onEvaluate;
   final ValueChanged<int> onInspectorTabChanged;
   final VoidCallback onBack;
   final VoidCallback onSettings;
@@ -872,6 +891,7 @@ class _DesktopGameLayout extends StatelessWidget {
                         child: _DesktopInspector(
                           state: state,
                           tab: inspectorTab,
+                          onEvaluate: onEvaluate,
                           onTabChanged: onInspectorTabChanged,
                           onSettings: onSettings,
                           onMenu: onMenu,
@@ -1075,6 +1095,7 @@ class _DesktopInspector extends StatelessWidget {
   const _DesktopInspector({
     required this.state,
     required this.tab,
+    required this.onEvaluate,
     required this.onTabChanged,
     required this.onSettings,
     required this.onMenu,
@@ -1082,6 +1103,7 @@ class _DesktopInspector extends StatelessWidget {
 
   final ChessState state;
   final int tab;
+  final VoidCallback onEvaluate;
   final ValueChanged<int> onTabChanged;
   final VoidCallback onSettings;
   final VoidCallback onMenu;
@@ -1120,7 +1142,10 @@ class _DesktopInspector extends StatelessWidget {
                   Expanded(
                     child: tab == 0
                         ? _MoveHistory(state: state, embedded: true)
-                        : _PositionSummary(state: state),
+                        : _PositionSummary(
+                            state: state,
+                            onEvaluate: onEvaluate,
+                          ),
                   ),
                 ],
               ),
@@ -1134,6 +1159,7 @@ class _DesktopInspector extends StatelessWidget {
           state: state,
           onNotation: () => onTabChanged(0),
           onMenu: onMenu,
+          onEvaluate: onEvaluate,
           desktop: true,
         ),
       ],
@@ -1317,9 +1343,10 @@ class _MoveNotationCell extends StatelessWidget {
 }
 
 class _PositionSummary extends StatelessWidget {
-  const _PositionSummary({required this.state});
+  const _PositionSummary({required this.state, required this.onEvaluate});
 
   final ChessState state;
+  final VoidCallback onEvaluate;
 
   @override
   Widget build(BuildContext context) {
@@ -1330,6 +1357,14 @@ class _PositionSummary extends StatelessWidget {
     return ListView(
       padding: EdgeInsets.zero,
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 14, 10, 12),
+          child: _DesktopPositionEvaluation(
+            state: state,
+            onEvaluate: onEvaluate,
+          ),
+        ),
+        const Divider(height: 1),
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 6),
           leading: const Icon(Icons.adjust),
@@ -1353,17 +1388,213 @@ class _PositionSummary extends StatelessWidget {
   }
 }
 
+class _MobilePositionEvaluation extends StatelessWidget {
+  const _MobilePositionEvaluation({required this.state});
+
+  final ChessState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final score =
+        state.aiEvaluationForRed ?? state.board.staticEvaluationForRed;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Text(
+              _evaluationLabel(state),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: _GameColors.muted),
+            ),
+            const Spacer(),
+            Text(
+              '${_positionScoreLabel(score)} 分',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: score == 0 ? _GameColors.ink : _scoreColor(score),
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        _PositionAdvantageMeter(score: score, compact: true),
+      ],
+    );
+  }
+}
+
+class _DesktopPositionEvaluation extends StatelessWidget {
+  const _DesktopPositionEvaluation({
+    required this.state,
+    required this.onEvaluate,
+  });
+
+  final ChessState state;
+  final VoidCallback onEvaluate;
+
+  @override
+  Widget build(BuildContext context) {
+    final score =
+        state.aiEvaluationForRed ?? state.board.staticEvaluationForRed;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.analytics_outlined, size: 19),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _evaluationLabel(state),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            Text(
+              '${_positionScoreLabel(score)} 分',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: score == 0 ? _GameColors.ink : _scoreColor(score),
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: state.isEvaluating ? '正在评分' : 'AI评分',
+              visualDensity: VisualDensity.compact,
+              onPressed: state.canEvaluate ? onEvaluate : null,
+              icon: state.isEvaluating
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.analytics_outlined, size: 20),
+            ),
+          ],
+        ),
+        const SizedBox(height: 11),
+        _PositionAdvantageMeter(score: score),
+        const SizedBox(height: 5),
+        Row(
+          children: [
+            Text(
+              '黑方优势',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: _GameColors.muted),
+            ),
+            const Spacer(),
+            Text(
+              '均势',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: _GameColors.muted),
+            ),
+            const Spacer(),
+            Text(
+              '红方优势',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: _GameColors.muted),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PositionAdvantageMeter extends StatelessWidget {
+  const _PositionAdvantageMeter({required this.score, this.compact = false});
+
+  final int score;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final offset = (score.clamp(-400, 400) / 800) * width;
+        final markerLeft = (width / 2 + offset - 5)
+            .clamp(0.0, width - 10)
+            .toDouble();
+        return SizedBox(
+          height: compact ? 8 : 10,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: compact ? 2 : 3,
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: _GameColors.inactive.withValues(alpha: .28),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: width / 2 - .5,
+                top: 1,
+                bottom: 1,
+                child: Container(width: 1, color: _GameColors.muted),
+              ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                left: markerLeft,
+                top: compact ? 0 : 1,
+                child: Container(
+                  width: 10,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: score == 0 ? _GameColors.jade : _scoreColor(score),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _positionScoreLabel(int score) => score > 0 ? '+$score' : '$score';
+
+String _evaluationLabel(ChessState state) {
+  if (state.isEvaluating) return 'AI 评分中';
+  if (state.evaluationFailed) return '评分失败，可重试';
+  final depth = state.aiEvaluationDepth;
+  if (depth != null && depth > 0) return 'AI 评分 · $depth 层';
+  if (state.aiEvaluationForRed != null) return 'AI 评估 · 快速结果';
+  return '快速估值（红方视角）';
+}
+
+Color _scoreColor(int score) =>
+    score > 0 ? const Color(0xFF9D3835) : const Color(0xFF303B3D);
+
 class _GameCommandBar extends StatelessWidget {
   const _GameCommandBar({
     required this.state,
     required this.onNotation,
     required this.onMenu,
+    required this.onEvaluate,
     this.desktop = false,
   });
 
   final ChessState state;
   final VoidCallback onNotation;
   final VoidCallback onMenu;
+  final VoidCallback onEvaluate;
   final bool desktop;
 
   @override
@@ -1401,6 +1632,15 @@ class _GameCommandBar extends StatelessWidget {
               : null,
         ),
       _GameCommand(label: '棋谱', icon: Icons.list_alt, onPressed: onNotation),
+      if (!desktop)
+        _GameCommand(
+          label: state.isEvaluating ? '评分中' : '评分',
+          icon: state.isEvaluating
+              ? Icons.hourglass_top_rounded
+              : Icons.analytics_outlined,
+          active: state.isEvaluating || state.aiEvaluationForRed != null,
+          onPressed: state.canEvaluate ? onEvaluate : null,
+        ),
       _GameCommand(label: '菜单', icon: Icons.menu, onPressed: onMenu),
     ];
     return _GlassSurface(

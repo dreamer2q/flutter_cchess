@@ -65,6 +65,8 @@ void main() {
     expect(find.text('翻转'), findsOneWidget);
     expect(find.text('棋谱'), findsOneWidget);
     expect(find.text('红方 · 我'), findsOneWidget);
+    expect(find.text('快速估值（红方视角）'), findsOneWidget);
+    expect(find.text('评分'), findsOneWidget);
 
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
@@ -395,6 +397,10 @@ void main() {
       ),
       findsOneWidget,
     );
+    await tester.tap(find.text('局面'));
+    await tester.pumpAndSettle();
+    expect(find.text('快速估值（红方视角）'), findsOneWidget);
+    expect(find.byTooltip('AI评分'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

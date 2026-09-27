@@ -20,10 +20,12 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     this.repository,
     this.initialFen = initialFenString,
     ChessEnginePort? engine,
+    ChessEnginePort? analysisEngine,
     int Function()? clockNowMs,
     String? gameId,
     DateTime? createdAt,
   }) : _providedEngine = engine,
+       _providedAnalysisEngine = analysisEngine,
        _clockNowMs = clockNowMs,
        gameId = gameId ?? DateTime.now().microsecondsSinceEpoch.toString(),
        createdAt = createdAt ?? DateTime.now(),
@@ -38,6 +40,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     );
     on<ChessEventUndo>(_onUndo);
     on<ChessEventGetHint>(_onGetHint);
+    on<ChessEventEvaluatePosition>(_onEvaluatePosition);
     on<ChessEventPause>(_onPaused);
     on<ChessEventResume>(_onResumed);
     on<ChessEventResign>(_onResigned);
@@ -47,6 +50,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     on<ChessEventClearSelection>(_onClearSelection);
     on<_ChessEventAiResolved>(_onAiResolved);
     on<_ChessEventHintResolved>(_onHintResolved);
+    on<_ChessEventEvaluationResolved>(_onEvaluationResolved);
     on<_ChessEventPersistenceCompleted>(_onPersistenceCompleted);
     on<_ChessEventPersistenceStarted>(_onPersistenceStarted);
     on<_ChessEventClockTick>(_onClockTick);
@@ -56,13 +60,16 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   final GameRepository? repository;
   final String initialFen;
   final ChessEnginePort? _providedEngine;
+  final ChessEnginePort? _providedAnalysisEngine;
   final int Function()? _clockNowMs;
   final Stopwatch _monotonic = Stopwatch()..start();
   final String gameId;
   final DateTime createdAt;
 
   ChessEnginePort? _engine;
+  ChessEnginePort? _analysisEngine;
   int _taskGeneration = 0;
+  int _evaluationGeneration = 0;
   int _effectSequence = 0;
   int _persistenceRevision = 0;
   bool _aiVsAiSearchPending = false;
@@ -85,6 +92,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     Emitter<ChessState> emit,
   ) async {
     _taskGeneration++;
+    _evaluationGeneration++;
     _aiVsAiSearchPending = false;
     emit(
       state.copyWith(
@@ -94,6 +102,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         aiStrength: event.aiStrength,
         aiMaxDepth: event.resolvedAiMaxDepth,
         aiMaxThinkMs: event.resolvedAiMaxThinkMs,
+        clearAiEvaluation: true,
         redAiMaxDepth:
             event.redAiMaxDepth ??
             (event.playMode == PlayMode.withAIvsAI
@@ -170,6 +179,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           blackAiStrength: event.blackAiStrength ?? event.aiStrength,
           aiMaxDepth: event.resolvedAiMaxDepth,
           aiMaxThinkMs: event.resolvedAiMaxThinkMs,
+          clearAiEvaluation: true,
           redAiMaxDepth:
               event.redAiMaxDepth ??
               (event.playMode == PlayMode.withAIvsAI
@@ -224,11 +234,13 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       maxDepth: event.aiMaxDepth,
       maxThinkMs: event.aiMaxThinkMs,
     );
+    _evaluationGeneration++;
     emit(
       state.copyWith(
         aiStrength: event.aiStrength,
         aiMaxDepth: event.aiMaxDepth,
         aiMaxThinkMs: event.aiMaxThinkMs,
+        clearAiEvaluation: true,
       ),
     );
     _queuePersist(state.board);
@@ -280,6 +292,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     bool requestAiVsAi = false,
     bool keepPaused = false,
   }) {
+    _evaluationGeneration++;
     final before = state.board;
     final movingSide = before.innerBoard.sdPlayer;
     if (_clock?.isExpired(movingSide) ?? false) {
@@ -340,6 +353,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         clearSelected: true,
         clearHintMoves: true,
         clearFailure: true,
+        clearAiEvaluation: true,
         redElapsedMs: clock.redElapsedMs,
         blackElapsedMs: clock.blackElapsedMs,
       ),
@@ -408,6 +422,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   Future<void> _onUndo(ChessEventUndo event, Emitter<ChessState> emit) async {
     if (!state.canUndo) return;
     _taskGeneration++;
+    _evaluationGeneration++;
     _clock?.stop();
     final clock = _clockSnapshot;
     final original = state.board;
@@ -456,6 +471,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           clearHintMoves: true,
           clearResult: true,
           clearFailure: true,
+          clearAiEvaluation: true,
         ),
       );
       _queuePersist(cursor);
@@ -483,6 +499,76 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           addError(error, stackTrace);
           add(_ChessEventHintResolved(generation, null, error));
         },
+      ),
+    );
+  }
+
+  void _onEvaluatePosition(
+    ChessEventEvaluatePosition event,
+    Emitter<ChessState> emit,
+  ) {
+    if (!state.canEvaluate || state.playMode == PlayMode.withNetwork) return;
+    final board = state.board;
+    final generation = ++_evaluationGeneration;
+    final engine = _analysisEngine ??= _providedAnalysisEngine ?? ChessEngine();
+    emit(state.copyWith(isEvaluating: true, evaluationFailed: false));
+    unawaited(
+      engine
+          .evaluatePosition(
+            squares: List<int>.unmodifiable(board.innerBoard.ucpcSquares),
+            sideToMove: board.innerBoard.sdPlayer,
+            maxDepth: state.aiMaxDepth,
+            maxThinkMs: state.aiMaxThinkMs,
+          )
+          .then(
+            (result) {
+              if (isClosed) return;
+              add(
+                _ChessEventEvaluationResolved(
+                  generation: generation,
+                  board: board,
+                  score: result.score,
+                  depth: result.depth,
+                ),
+              );
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (isClosed) return;
+              addError(error, stackTrace);
+              add(
+                _ChessEventEvaluationResolved(
+                  generation: generation,
+                  board: board,
+                  score: 0,
+                  depth: 0,
+                  error: error,
+                ),
+              );
+            },
+          ),
+    );
+  }
+
+  void _onEvaluationResolved(
+    _ChessEventEvaluationResolved event,
+    Emitter<ChessState> emit,
+  ) {
+    if (event.generation != _evaluationGeneration ||
+        state.board != event.board) {
+      return;
+    }
+    if (event.error != null) {
+      emit(state.copyWith(isEvaluating: false, evaluationFailed: true));
+      return;
+    }
+    emit(
+      state.copyWith(
+        aiEvaluationForRed: event.board.isTurn(PlaySide.red)
+            ? event.score
+            : -event.score,
+        aiEvaluationDepth: event.depth,
+        isEvaluating: false,
+        evaluationFailed: false,
       ),
     );
   }
@@ -898,6 +984,9 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       await repository!.save(_recordFor(state.board));
     }
     await _engine?.dispose();
+    if (!identical(_analysisEngine, _engine)) {
+      await _analysisEngine?.dispose();
+    }
     return super.close();
   }
 }

@@ -26,6 +26,7 @@ class XqwlSearch {
   final Map<String, Map<int, int>> _bookByHistory = {};
   int nBookSize = 0;
   int mvResult = 0; // 电脑走的棋
+  int scoreResult = 0; // 当前根局面的搜索分数，按走子方视角
   // Search diagnostics are used by deterministic engine regression tests.
   int nodesSearched = 0;
   int transpositionCutoffs = 0;
@@ -472,21 +473,35 @@ class XqwlSearch {
   }
 
   // 迭代加深搜索过程
+  int evaluatePosition({
+    int maxDepth = XqwlPosition.LIMIT_DEPTH,
+    int maxThinkMs = 5000,
+  }) {
+    searchMain(
+      maxDepth: maxDepth,
+      maxThinkMs: maxThinkMs,
+      useOpeningBook: false,
+    );
+    return scoreResult;
+  }
+
   void searchMain({
     int maxDepth = XqwlPosition.LIMIT_DEPTH,
     int maxThinkMs = 5000,
+    bool useOpeningBook = true,
   }) {
     _maxThinkMs = maxThinkMs;
     _searchAborted = false;
     nodesSearched = 0;
     transpositionCutoffs = 0;
     completedDepth = 0;
+    scoreResult = pos.evaluate();
     _generation = (_generation + 1) & 0x7fffffff;
     if (_generation == 0) _generation = 1;
     _searchClock
       ..reset()
       ..start();
-    final bookMove = searchBook();
+    final bookMove = useOpeningBook ? searchBook() : 0;
     if (bookMove != 0) {
       mvResult = bookMove;
       _searchClock.stop();
@@ -533,10 +548,15 @@ class XqwlSearch {
       return;
     }
     if (vl == 1) {
+      if (pos.makeMove(fallbackMove)) {
+        scoreResult = -pos.evaluate();
+        pos.undoMakeMove();
+      }
       _searchClock.stop();
       return;
     }
     if (vl == 0) {
+      scoreResult = pos.inCheck() ? -XqwlPosition.MATE_VALUE : 0;
       _searchClock.stop();
       return;
     }
@@ -550,6 +570,7 @@ class XqwlSearch {
         break;
       }
       completedDepth = i;
+      scoreResult = vl;
       // 搜索到杀棋，就终止搜索
       if (vl > XqwlPosition.WIN_VALUE || vl < -XqwlPosition.WIN_VALUE) {
         break;

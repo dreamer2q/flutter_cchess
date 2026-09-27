@@ -116,6 +116,44 @@ void main() {
     await bloc.close();
   });
 
+  test(
+    'AI position score uses Red perspective and clears after a move',
+    () async {
+      final engine = ControlledChessEngine();
+      final board = FenUtil.parse(initialFenString.replaceFirst(' w ', ' b '));
+      final bloc = _bloc(analysisEngine: engine);
+      bloc.add(
+        ChessEventInitialized(
+          initialBoard: board,
+          playMode: PlayMode.withSelf,
+          aiMaxDepth: 4,
+          aiMaxThinkMs: 800,
+        ),
+      );
+      await _waitFor(bloc, (state) => state.phase == GamePhase.playerTurn);
+
+      bloc.add(const ChessEventEvaluatePosition());
+      await _waitFor(bloc, (state) => state.isEvaluating);
+      expect(engine.evaluationSideToMove, 1);
+      expect(engine.evaluationMaxDepth, 4);
+      expect(engine.evaluationMaxThinkMs, 800);
+      engine.evaluationCompleter.complete(
+        const EnginePositionEvaluation(score: 64, depth: 3),
+      );
+      await _waitFor(bloc, (state) => state.aiEvaluationForRed != null);
+
+      expect(bloc.state.aiEvaluationForRed, -64);
+      expect(bloc.state.aiEvaluationDepth, 3);
+
+      final move = bloc.state.board.getMoves().first;
+      bloc.add(ChessEventMoveRequested(move));
+      await _waitFor(bloc, (state) => state.board.lastMoves.length == 1);
+      expect(bloc.state.aiEvaluationForRed, isNull);
+      expect(bloc.state.isEvaluating, isFalse);
+      await bloc.close();
+    },
+  );
+
   test('AI-vs-AI alternates side strengths and blocks board input', () async {
     final engine = ControlledChessEngine()
       ..queueAiVsAiMove()
@@ -209,6 +247,29 @@ void main() {
       );
       engine.completeAiVsAiMove(blackMove.mv);
       await _waitFor(bloc, (state) => state.board.lastMoves.length == 2);
+      await bloc.close();
+    },
+  );
+
+  test(
+    'discards an AI score if the position changes during analysis',
+    () async {
+      final engine = ControlledChessEngine();
+      final bloc = _bloc(analysisEngine: engine);
+      await _initialize(bloc, PlayMode.withSelf);
+
+      bloc.add(const ChessEventEvaluatePosition());
+      await _waitFor(bloc, (state) => state.isEvaluating);
+      final move = bloc.state.board.getMoves().first;
+      bloc.add(ChessEventMoveRequested(move));
+      await _waitFor(bloc, (state) => state.board.lastMoves.length == 1);
+      engine.evaluationCompleter.complete(
+        const EnginePositionEvaluation(score: 75, depth: 2),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(bloc.state.aiEvaluationForRed, isNull);
+      expect(bloc.state.isEvaluating, isFalse);
       await bloc.close();
     },
   );
@@ -488,12 +549,14 @@ Board _apply(Board board, MovePos move) => board.copyWith(
 ChessBloc _bloc({
   GameRepository? repository,
   ChessEnginePort? engine,
+  ChessEnginePort? analysisEngine,
   Ticker ticker = const Ticker(),
   int Function()? clockNowMs,
 }) => ChessBloc(
   ticker: ticker,
   repository: repository,
   engine: engine,
+  analysisEngine: analysisEngine,
   clockNowMs: clockNowMs,
 );
 
@@ -533,7 +596,12 @@ class ControlledChessEngine implements ChessEnginePort {
   final Completer<int> makeMoveCompleter = Completer<int>();
   final Completer<int> hintCompleter = Completer<int>();
   final Completer<int> resumeMoveCompleter = Completer<int>();
+  final Completer<EnginePositionEvaluation> evaluationCompleter =
+      Completer<EnginePositionEvaluation>();
   final List<int> restoredMoves = <int>[];
+  int? evaluationSideToMove;
+  int? evaluationMaxDepth;
+  int? evaluationMaxThinkMs;
   final List<AiStrength> requestedAutoStrengths = <AiStrength>[];
   final List<int> requestedAutoDepths = <int>[];
   final List<int> requestedAutoThinkMs = <int>[];
@@ -562,6 +630,19 @@ class ControlledChessEngine implements ChessEnginePort {
   Future<int> makeMove(int mv) => makeMoveCompleter.future;
   @override
   Future<int> requestMove() => hintCompleter.future;
+  @override
+  Future<EnginePositionEvaluation> evaluatePosition({
+    required List<int> squares,
+    required int sideToMove,
+    required int maxDepth,
+    required int maxThinkMs,
+  }) {
+    evaluationSideToMove = sideToMove;
+    evaluationMaxDepth = maxDepth;
+    evaluationMaxThinkMs = maxThinkMs;
+    return evaluationCompleter.future;
+  }
+
   @override
   Future<int> requestAndMakeMove() {
     requestedAutoStrengths.add(strength);
