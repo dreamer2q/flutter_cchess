@@ -31,7 +31,7 @@ void main() {
     expect(find.text('七类棋子'), findsOneWidget);
     expect(find.textContaining('炮与目标之间必须恰好隔一个棋子'), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('返回首页'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('关于中国象棋'));
     await tester.pumpAndSettle();
