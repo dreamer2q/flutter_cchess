@@ -122,4 +122,25 @@ void main() {
     // ignore: avoid_print
     print('OPENING_TOTAL_DEPTH $depth NODES $nodes');
   });
+
+  test('late endgames from a 15-minute AI match remain searchable', () {
+    const positions = [
+      '5k3/4a4/3a5/3N5/4c3C/9/3p4P/B4A3/3n5/5K3 w - - 0 1',
+      '3k1a3/9/3ac4/9/9/2N6/3n4P/9/5K3/2BC5 w - - 0 1',
+      '5a3/4k4/5N3/9/9/8P/3n5/4B4/5K3/3C3c1 w - - 0 1',
+      '4kN3/9/9/9/9/8P/9/4B4/2nC1K3/7c1 b - - 0 1',
+    ];
+    for (final fen in positions) {
+      final search = XqwlSearch();
+      _load(search, fen);
+      search.searchMain(maxThinkMs: 300, useOpeningBook: false);
+      expect(search.mvResult, isNot(0), reason: fen);
+      expect(search.pos.makeMove(search.mvResult), isTrue, reason: fen);
+      // ignore: avoid_print
+      print(
+        'ENDGAME depth=${search.completedDepth} score=${search.scoreResult} '
+        'nodes=${search.nodesSearched} time=${search.elapsedMs}ms',
+      );
+    }
+  });
 }

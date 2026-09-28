@@ -242,6 +242,51 @@ void main() {
     await bloc.close();
   });
 
+  test('AI-vs-AI animation delay does not consume the next clock', () async {
+    Future<void> waitForRequests(ControlledChessEngine engine, int count) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 2));
+      while (engine.requestedAutoStrengths.length < count) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail('AI request $count did not start');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    var now = 0;
+    final ticker = _ManualTicker();
+    final engine = ControlledChessEngine()
+      ..queueAiVsAiMove()
+      ..queueAiVsAiMove();
+    final bloc = _bloc(engine: engine, ticker: ticker, clockNowMs: () => now);
+    final initial = FenUtil.parse(initialFenString);
+    bloc.add(
+      ChessEventInitialized(
+        initialBoard: initial,
+        playMode: PlayMode.withAIvsAI,
+        timeControlSeconds: 15,
+        aiVsAiStepDelayMs: 200,
+      ),
+    );
+    await waitForRequests(engine, 1);
+    now = 1000;
+    engine.completeAiVsAiMove(initial.getMoves().first.mv);
+    await _waitFor(bloc, (state) => state.board.lastMoves.length == 1);
+    expect(bloc.state.redElapsedMs, 1000);
+
+    now = 5000;
+    ticker.fire();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(bloc.state.blackElapsedMs, 0);
+    await waitForRequests(engine, 2);
+
+    now = 5600;
+    ticker.fire();
+    await _waitFor(bloc, (state) => state.blackElapsedMs == 600);
+    await bloc.close();
+    await ticker.dispose();
+  });
+
   test(
     'AI-vs-AI result while paused waits for resume before next search',
     () async {

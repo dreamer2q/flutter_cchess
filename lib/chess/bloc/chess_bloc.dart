@@ -375,7 +375,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         : GamePhase.playerTurn;
     _clock?.stop();
     final clock = _clockSnapshot;
-    if (!finished && !keepPaused) {
+    final waitingForAiAnimation = requestAiVsAi && state.aiVsAiStepDelayMs > 0;
+    if (!finished && !keepPaused && !waitingForAiAnimation) {
       _clock?.start(after.innerBoard.sdPlayer);
     }
     emit(
@@ -689,6 +690,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           _aiVsAiSearchPending = false;
           return null;
         }
+        if (respectStepDelay) _clock?.start(side.index);
         await engine.setStrength(strength, maxDepth: maxDepth);
         return engine.requestAndMakeMove(
           maxThinkMs: _aiBudget(strength, strength.maxThinkMs),

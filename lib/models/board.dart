@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
 import 'package:flutter_cchess/chess/game/game_board.dart';
+import 'package:flutter_cchess/engine/xqlite/position_evaluator.dart';
 import 'models.dart';
 
 enum BoardSide { RedPlayer, BlackPlayer }
@@ -78,7 +79,10 @@ class Board extends Equatable {
 
   /// Static engine evaluation from Red's perspective, excluding the side-to-
   /// move bonus so the displayed score does not flip after every turn.
-  int get staticEvaluationForRed => innerBoard.vlWhite - innerBoard.vlBlack;
+  int get staticEvaluationForRed =>
+      innerBoard.vlWhite -
+      innerBoard.vlBlack +
+      PositionEvaluator.evaluateSquares(innerBoard.ucpcSquares);
 
   List<MovePos> getMoves([int sq = 0]) {
     List<int> mvs = [];
