@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
+import 'package:flutter_cchess/chess/game/ai_time_budget.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
 
 import 'game_settings.dart';
@@ -94,7 +95,7 @@ class _GameSettingsPageState extends State<GameSettingsPage> {
 
 enum _SettingsSection {
   appearance('棋盘外观', '更换棋盘主题与棋子风格', Icons.palette_outlined),
-  ai('电脑对手', '设置电脑强度与单步搜索上限', Icons.smart_toy_outlined),
+  ai('电脑对手', '设置电脑强度与思考时间', Icons.smart_toy_outlined),
   feedback('声音与触觉', '控制对局中的声音与设备反馈', Icons.volume_up_outlined),
   motion('动态效果', '调整棋子动画与界面动效', Icons.motion_photos_on_outlined);
 
@@ -417,25 +418,7 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
             ),
           Row(
             children: [
-              const Expanded(child: Text('搜索深度上限')),
-              Text('$depth 层'),
-            ],
-          ),
-          Slider(
-            value: _depth,
-            min: 1,
-            max: AiStrength.maxConfiguredDepth.toDouble(),
-            divisions: AiStrength.maxConfiguredDepth - 1,
-            label: '$depth 层',
-            onChanged: (value) => setState(() => _depth = value),
-            onChangeEnd: (value) => widget.onUpdate(
-              widget.settings.copyWith(aiMaxDepth: value.round()),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Expanded(child: Text('每步思考上限')),
+              const Expanded(child: Text('思考强度基准')),
               Text(_formatThinkTime(thinkMs)),
             ],
           ),
@@ -451,10 +434,30 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
             ),
           ),
           Text(
-            '设置的是搜索上限；局面简单时电脑可能更快落子。',
+            '15分钟开局约 ${_formatThinkTime(aiTimeBudgetMs(strength: widget.settings.aiStrength, configuredThinkMs: thinkMs, remainingMs: 900000, timedGame: true))}；之后随剩余时间缩短。玩家回合也会预想应手；无棋钟时使用此基准时间。',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: const Color(0xFF68716E)),
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('高级：限制搜索深度'),
+            subtitle: Text(
+              depth == 0 ? '自动 · 按时间搜索（推荐）' : '最多 $depth 层，可能提前落子',
+            ),
+            children: [
+              Slider(
+                value: _depth,
+                min: 0,
+                max: AiStrength.maxConfiguredDepth.toDouble(),
+                divisions: AiStrength.maxConfiguredDepth,
+                label: depth == 0 ? '自动' : '$depth 层',
+                onChanged: (value) => setState(() => _depth = value),
+                onChangeEnd: (value) => widget.onUpdate(
+                  widget.settings.copyWith(aiMaxDepth: value.round()),
+                ),
+              ),
+            ],
           ),
         ],
       ),

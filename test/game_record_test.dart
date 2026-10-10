@@ -95,12 +95,34 @@ void main() {
 
   test('old strong-game settings are migrated to a bounded search budget', () {
     final legacy = record.toJson()
+      ..remove('aiSearchVersion')
       ..['aiMaxDepth'] = 64
       ..['aiMaxThinkMs'] = 5000;
 
     final migrated = GameRecord.fromJson(legacy);
     expect(migrated.aiMaxDepth, AiStrength.hard.maxDepth);
     expect(migrated.aiMaxThinkMs, AiStrength.hard.maxThinkMs);
+  });
+
+  test('automatic search survives save/load and legacy presets migrate', () {
+    final automatic = record.copyWith(
+      aiMaxDepth: 0,
+      aiMaxThinkMs: 5000,
+      redAiMaxDepth: 0,
+      blackAiMaxDepth: 0,
+    );
+    expect(GameRecord.decode(automatic.encode()), automatic);
+    final legacy = record.toJson()
+      ..remove('aiSearchVersion')
+      ..['aiMaxDepth'] = 8
+      ..['aiMaxThinkMs'] = 2000
+      ..['redAiMaxDepth'] = 3
+      ..['blackAiMaxDepth'] = 5;
+    final migrated = GameRecord.fromJson(legacy);
+    expect(migrated.aiMaxDepth, 0);
+    expect(migrated.aiMaxThinkMs, 5000);
+    expect(migrated.redAiMaxDepth, 0);
+    expect(migrated.blackAiMaxDepth, 0);
   });
 
   test('in-memory repository saves, lists, and deletes records', () async {

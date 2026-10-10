@@ -1,10 +1,12 @@
 enum AiStrength {
-  easy(maxDepth: 3, maxThinkMs: 300),
-  normal(maxDepth: 5, maxThinkMs: 1500),
-  hard(maxDepth: 8, maxThinkMs: 2000);
+  easy(maxDepth: 0, maxThinkMs: 300),
+  normal(maxDepth: 0, maxThinkMs: 1500),
+  hard(maxDepth: 0, maxThinkMs: 5000);
 
-  static const int maxConfiguredDepth = 8;
-  static const int maxConfiguredThinkMs = 2000;
+  /// Zero means iterative deepening until the time budget expires.
+  static const int automaticDepth = 0;
+  static const int maxConfiguredDepth = 32;
+  static const int maxConfiguredThinkMs = 10000;
 
   const AiStrength({required this.maxDepth, required this.maxThinkMs});
 
@@ -12,7 +14,7 @@ enum AiStrength {
   final int maxThinkMs;
 
   static int clampDepth(int depth) =>
-      depth.clamp(1, maxConfiguredDepth).toInt();
+      depth.clamp(automaticDepth, maxConfiguredDepth).toInt();
 
   static int clampThinkMs(int milliseconds) =>
       milliseconds.clamp(100, maxConfiguredThinkMs).toInt();
@@ -22,6 +24,21 @@ enum AiStrength {
     required int maxDepth,
     required int maxThinkMs,
   }) => strength == AiStrength.hard && maxDepth == 64 && maxThinkMs == 5000;
+
+  int get legacyDepth => switch (this) {
+    easy => 3,
+    normal => 5,
+    hard => 8,
+  };
+
+  bool isLegacyPreset(int depth, int milliseconds) =>
+      (depth == legacyDepth &&
+          milliseconds == (this == hard ? 2000 : maxThinkMs)) ||
+      isLegacyHardDefault(
+        strength: this,
+        maxDepth: depth,
+        maxThinkMs: milliseconds,
+      );
 
   static AiStrength fromName(String? name) => AiStrength.values.firstWhere(
     (value) => value.name == name,

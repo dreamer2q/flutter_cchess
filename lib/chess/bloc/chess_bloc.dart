@@ -87,6 +87,37 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         blackElapsedMs: state.blackElapsedMs,
       );
 
+  int _aiBudget(AiStrength strength, int configuredThinkMs, {int? side}) {
+    final aiSide = side ?? state.board.innerBoard.sdPlayer;
+    final remaining =
+        state.timeControlSeconds * 1000 - _clockSnapshot.elapsedFor(aiSide);
+    return aiTimeBudgetMs(
+      strength: strength,
+      configuredThinkMs: configuredThinkMs,
+      remainingMs: remaining,
+      timedGame: state.timeControlSeconds > 0,
+    );
+  }
+
+  void _startPonder() {
+    if (state.playMode != PlayMode.withAI ||
+        state.phase != GamePhase.playerTurn ||
+        _engine == null) {
+      return;
+    }
+    final board = state.board.innerBoard;
+    _engine!.startPonder(
+      squares: List<int>.from(board.ucpcSquares),
+      sideToMove: board.sdPlayer,
+      maxDepth: state.aiMaxDepth,
+      maxThinkMs: _aiBudget(
+        state.aiStrength,
+        state.aiMaxThinkMs,
+        side: 1 - board.sdPlayer,
+      ),
+    );
+  }
+
   Future<void> _onInitialized(
     ChessEventInitialized event,
     Emitter<ChessState> emit,
@@ -210,6 +241,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         } else {
           _requestAiMove(fromRestoredPosition: true);
         }
+      } else {
+        _startPonder();
       }
     } catch (error, stackTrace) {
       addError(error, stackTrace);
@@ -244,6 +277,10 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       ),
     );
     _queuePersist(state.board);
+    if (state.playMode == PlayMode.withAI &&
+        state.phase == GamePhase.playerTurn) {
+      _startPonder();
+    }
   }
 
   void _onBoardTapped(ChessEventBoardTap event, Emitter<ChessState> emit) {
@@ -338,7 +375,8 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         : GamePhase.playerTurn;
     _clock?.stop();
     final clock = _clockSnapshot;
-    if (!finished && !keepPaused) {
+    final waitingForAiAnimation = requestAiVsAi && state.aiVsAiStepDelayMs > 0;
+    if (!finished && !keepPaused && !waitingForAiAnimation) {
       _clock?.start(after.innerBoard.sdPlayer);
     }
     emit(
@@ -363,6 +401,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       _requestAiMove(humanMove: move.mv);
     } else if (requestAiVsAi && !finished && !keepPaused) {
       _requestAiVsAiMove(respectStepDelay: true);
+    } else if (!finished &&
+        !keepPaused &&
+        state.playMode == PlayMode.withAI &&
+        state.phase == GamePhase.playerTurn) {
+      _startPonder();
     }
   }
 
@@ -421,6 +464,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   Future<void> _onUndo(ChessEventUndo event, Emitter<ChessState> emit) async {
     if (!state.canUndo) return;
+    _engine?.stopPonder();
     _taskGeneration++;
     _evaluationGeneration++;
     _clock?.stop();
@@ -475,6 +519,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
         ),
       );
       _queuePersist(cursor);
+      if (state.playMode == PlayMode.withAI) _startPonder();
     } catch (error, stackTrace) {
       addError(error, stackTrace);
       _clock?.start(original.innerBoard.sdPlayer);
@@ -603,9 +648,10 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     final engine = _engine;
     if (engine == null) return;
     final generation = ++_taskGeneration;
+    final budget = _aiBudget(state.aiStrength, state.aiMaxThinkMs);
     final future = fromRestoredPosition
-        ? engine.requestAndMakeMove()
-        : engine.makeMove(humanMove!);
+        ? engine.requestAndMakeMove(maxThinkMs: budget)
+        : engine.makeMove(humanMove!, maxThinkMs: budget);
     unawaited(
       future.then(
         (mv) => add(_ChessEventAiResolved(generation, MovePos.mv(mv), null)),
@@ -644,8 +690,11 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
           _aiVsAiSearchPending = false;
           return null;
         }
+        if (respectStepDelay) _clock?.start(side.index);
         await engine.setStrength(strength, maxDepth: maxDepth);
-        return engine.requestAndMakeMove();
+        return engine.requestAndMakeMove(
+          maxThinkMs: _aiBudget(strength, strength.maxThinkMs),
+        );
       }().then(
         (mv) {
           if (mv != null) {
@@ -692,6 +741,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   void _onPaused(ChessEventPause event, Emitter<ChessState> emit) {
     if (!state.canPause) return;
+    _engine?.stopPonder();
     _clock?.stop();
     final clock = _clockSnapshot;
     emit(
@@ -719,6 +769,9 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       _clock?.start(state.board.innerBoard.sdPlayer);
     }
     emit(state.copyWith(phase: target));
+    if (target == GamePhase.playerTurn && state.playMode == PlayMode.withAI) {
+      _startPonder();
+    }
     if (target == GamePhase.aiThinking &&
         state.playMode == PlayMode.withAIvsAI &&
         !_aiVsAiSearchPending) {
@@ -728,6 +781,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   void _onResigned(ChessEventResign event, Emitter<ChessState> emit) {
     if (!state.canResign || state.board.pcPairs.isEmpty) return;
+    _engine?.stopPonder();
     _taskGeneration++;
     _aiVsAiSearchPending = false;
     _clock?.stop();
@@ -860,6 +914,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   }
 
   void _finishOnTime(int losingSide, Emitter<ChessState> emit) {
+    _engine?.stopPonder();
     _taskGeneration++;
     _aiVsAiSearchPending = false;
     _clock?.stop();
@@ -975,6 +1030,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
 
   @override
   Future<void> close() async {
+    _engine?.stopPonder();
     _taskGeneration++;
     _aiVsAiSearchPending = false;
     await _clockTicks?.cancel();

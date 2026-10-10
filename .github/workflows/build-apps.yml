@@ -38,6 +38,9 @@ jobs:
           test/xqlite_search_hash_test.dart
           test/xqlite_search_effectiveness_test.dart
           test/chess_engine_strength_test.dart
+          test/xqlite_time_budget_test.dart
+          test/position_evaluation_test.dart
+          test/engine_skill_benchmark_test.dart
 
   android:
     name: Android APK
