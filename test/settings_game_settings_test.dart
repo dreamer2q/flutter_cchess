@@ -26,7 +26,7 @@ void main() {
     );
 
     expect(settings.toJson(), <String, Object>{
-      'schemaVersion': 3,
+      'schemaVersion': 4,
       'themeConfigAsset': 'assets/skins/night/config.json',
       'soundEnabled': false,
       'musicEnabled': false,
@@ -86,8 +86,9 @@ void main() {
   });
 
   test('keeps configured AI budgets within supported device limits', () {
-    expect(AiStrength.hard.maxDepth, 8);
-    expect(AiStrength.hard.maxThinkMs, 2000);
+    expect(AiStrength.hard.maxDepth, AiStrength.automaticDepth);
+    expect(AiStrength.hard.maxThinkMs, 5000);
+    expect(AiStrength.clampDepth(0), 0);
     expect(AiStrength.clampDepth(64), AiStrength.maxConfiguredDepth);
     expect(AiStrength.clampThinkMs(10000), AiStrength.maxConfiguredThinkMs);
   });
@@ -111,12 +112,37 @@ void main() {
 
   test('rejects malformed and unsupported settings', () {
     expect(
-      () => GameSettings.fromJson(<String, dynamic>{'schemaVersion': 4}),
+      () => GameSettings.fromJson(<String, dynamic>{'schemaVersion': 5}),
       throwsFormatException,
     );
     expect(
       () => GameSettings.fromJson(<String, dynamic>{'soundEnabled': 'yes'}),
       throwsFormatException,
     );
+  });
+
+  test('migrates old preset caps but preserves custom depth and time', () {
+    for (final strength in AiStrength.values) {
+      final migrated = GameSettings.fromJson({
+        'schemaVersion': 3,
+        'aiStrength': strength.name,
+        'aiMaxDepth': strength.legacyDepth,
+        'aiMaxThinkMs': strength == AiStrength.hard
+            ? 2000
+            : strength.maxThinkMs,
+      });
+      expect(migrated.aiMaxDepth, 0);
+      expect(migrated.aiMaxThinkMs, strength.maxThinkMs);
+      expect(GameSettings.decode(migrated.encode()), migrated);
+    }
+    final custom = GameSettings.fromJson({
+      'schemaVersion': 3,
+      'aiMaxDepth': 4,
+      'aiMaxThinkMs': 7000,
+    });
+    expect(custom.aiMaxDepth, 4);
+    expect(custom.aiMaxThinkMs, 7000);
+    const manual = GameSettings(aiMaxDepth: 5, aiMaxThinkMs: 1500);
+    expect(GameSettings.decode(manual.encode()), manual);
   });
 }

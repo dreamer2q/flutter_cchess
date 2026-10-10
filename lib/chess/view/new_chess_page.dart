@@ -669,33 +669,31 @@ class _AiVsAiSetupDialog extends StatefulWidget {
 class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
   late int _timeControlSeconds = widget.initialTimeControlSeconds;
   AiStrength _redStrength = AiStrength.hard;
-  int _redDepth = AiStrength.maxConfiguredDepth;
+  int _redDepth = AiStrength.automaticDepth;
   AiStrength _blackStrength = AiStrength.hard;
-  int _blackDepth = AiStrength.maxConfiguredDepth;
+  int _blackDepth = AiStrength.automaticDepth;
   int _stepDelayMs = 800;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return AlertDialog(
       title: const Text('AI 对战'),
       content: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: 500,
-          maxHeight: MediaQuery.sizeOf(context).height * 0.58,
+          maxWidth: 440,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.65,
         ),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text('每方用时'),
+              const SizedBox(height: 8),
               DropdownButtonFormField<int>(
                 initialValue: _timeControlSeconds,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '每方用时',
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: const [
                   DropdownMenuItem(value: 300, child: Text('5 分钟')),
                   DropdownMenuItem(value: 600, child: Text('10 分钟')),
@@ -709,32 +707,27 @@ class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
                   }
                 },
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 20),
               _sideControls(
                 title: '红方电脑',
                 strength: _redStrength,
-                depth: _redDepth,
                 onStrengthChanged: (value) =>
                     setState(() => _redStrength = value),
-                onDepthChanged: (value) => setState(() => _redDepth = value),
               ),
-              Divider(color: theme.colorScheme.outlineVariant),
+              const SizedBox(height: 20),
               _sideControls(
                 title: '黑方电脑',
                 strength: _blackStrength,
-                depth: _blackDepth,
                 onStrengthChanged: (value) =>
                     setState(() => _blackStrength = value),
-                onDepthChanged: (value) => setState(() => _blackDepth = value),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
+              const Text('落子间隔'),
+              const SizedBox(height: 8),
               DropdownButtonFormField<int>(
                 initialValue: _stepDelayMs,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '每步之间停顿',
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: const [
                   DropdownMenuItem(value: 0, child: Text('无停顿')),
                   DropdownMenuItem(value: 400, child: Text('0.4 秒')),
@@ -748,6 +741,24 @@ class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
                     setState(() => _stepDelayMs = value);
                   }
                 },
+              ),
+              const SizedBox(height: 8),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: const Text('高级设置'),
+                children: [
+                  _depthControl(
+                    title: '红方搜索深度',
+                    depth: _redDepth,
+                    onChanged: (value) => setState(() => _redDepth = value),
+                  ),
+                  _depthControl(
+                    title: '黑方搜索深度',
+                    depth: _blackDepth,
+                    onChanged: (value) => setState(() => _blackDepth = value),
+                  ),
+                ],
               ),
             ],
           ),
@@ -780,9 +791,7 @@ class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
   Widget _sideControls({
     required String title,
     required AiStrength strength,
-    required int depth,
     required ValueChanged<AiStrength> onStrengthChanged,
-    required ValueChanged<int> onDepthChanged,
   }) {
     final theme = Theme.of(context);
     return Column(
@@ -793,10 +802,7 @@ class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
         DropdownButtonFormField<AiStrength>(
           initialValue: strength,
           isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: '电脑强度',
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
           items: const [
             DropdownMenuItem(value: AiStrength.easy, child: Text('入门')),
             DropdownMenuItem(value: AiStrength.normal, child: Text('普通')),
@@ -808,15 +814,31 @@ class _AiVsAiSetupDialogState extends State<_AiVsAiSetupDialog> {
             }
           },
         ),
-        const SizedBox(height: 4),
-        Row(children: [const Text('思考深度'), const Spacer(), Text('$depth 层')]),
+      ],
+    );
+  }
+
+  Widget _depthControl({
+    required String title,
+    required int depth,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(title),
+            const Spacer(),
+            Text(depth == 0 ? '自动' : '$depth 层'),
+          ],
+        ),
         Slider(
           value: depth.toDouble(),
-          min: 1,
+          min: 0,
           max: AiStrength.maxConfiguredDepth.toDouble(),
-          divisions: AiStrength.maxConfiguredDepth - 1,
-          label: '$depth 层',
-          onChanged: (value) => onDepthChanged(value.round()),
+          divisions: AiStrength.maxConfiguredDepth,
+          label: depth == 0 ? '自动' : '$depth 层',
+          onChanged: (value) => onChanged(value.round()),
         ),
       ],
     );

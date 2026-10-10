@@ -1,4 +1,5 @@
 import 'package:flutter_cchess/engine/xqlite/struct.dart';
+import 'package:flutter_cchess/engine/xqlite/position_evaluator.dart';
 
 /// xiangqi Witch Light
 /// 局面结构
@@ -462,6 +463,8 @@ class XqwlPosition {
 
   int sdPlayer = 0; // 轮到谁走，0=红方，1=黑方
   List<int> ucpcSquares = List.filled(256, 0); // 棋盘上的棋子
+  final List<int> _defenders = [0, 0];
+  final List<int> _attack = [0, 0];
   int vlWhite = 0;
   int vlBlack = 0; // 红、黑双方的子力价值
   int nDistance = 0; // 距离根节点的步数
@@ -478,6 +481,8 @@ class XqwlPosition {
   void clearBoard() {
     sdPlayer = vlWhite = vlBlack = nDistance = 0;
     ucpcSquares.fillRange(0, ucpcSquares.length, 0);
+    _defenders.fillRange(0, 2, 0);
+    _attack.fillRange(0, 2, 0);
     zobr = ZobristStruct.initZero();
   }
 
@@ -509,6 +514,9 @@ class XqwlPosition {
   /// 在棋盘上放一枚棋子
   void addPiece(int sq, int pc) {
     ucpcSquares[sq] = pc;
+    final side = pc < 16 ? 0 : 1;
+    if (PositionEvaluator.isDefender(pc)) _defenders[side]++;
+    _attack[side] += PositionEvaluator.attackWeight(pc, sq);
     // 红方加分，黑方(注意"cucvlPiecePos"取值要颠倒)减分
     if (pc < 16) {
       vlWhite += cucvlPiecePos[pc - 8][sq];
@@ -522,6 +530,9 @@ class XqwlPosition {
   /// 从棋盘上拿走一枚棋子
   void delPiece(int sq, int pc) {
     ucpcSquares[sq] = 0;
+    final side = pc < 16 ? 0 : 1;
+    if (PositionEvaluator.isDefender(pc)) _defenders[side]--;
+    _attack[side] -= PositionEvaluator.attackWeight(pc, sq);
     // 红方减分，黑方(注意"cucvlPiecePos"取值要颠倒)加分
     if (pc < 16) {
       vlWhite -= cucvlPiecePos[pc - 8][sq];
@@ -534,8 +545,16 @@ class XqwlPosition {
 
   /// 局面评价函数
   int evaluate() {
-    return (sdPlayer == 0 ? vlWhite - vlBlack : vlBlack - vlWhite) +
-        ADVANCED_VALUE;
+    final redScore =
+        vlWhite -
+        vlBlack +
+        PositionEvaluator.fromCounts(
+          _defenders[0],
+          _defenders[1],
+          _attack[0],
+          _attack[1],
+        );
+    return (sdPlayer == 0 ? redScore : -redScore) + ADVANCED_VALUE;
   }
 
   bool inCheck() {

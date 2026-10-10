@@ -14,6 +14,8 @@ class HashItem {
 }
 
 class XqwlSearch {
+  XqwlSearch({Stopwatch? clock}) : _searchClock = clock ?? Stopwatch();
+
   static const bool GEN_CAPTURE = true;
   static const bool NO_NULL = true;
 
@@ -31,18 +33,27 @@ class XqwlSearch {
   int nodesSearched = 0;
   int transpositionCutoffs = 0;
   int completedDepth = 0;
-  final Stopwatch _searchClock = Stopwatch();
+  int get elapsedMs => _searchClock.elapsedMilliseconds;
+  bool get stoppedOnTime => _searchAborted;
+  final Stopwatch _searchClock;
   int _maxThinkMs = 0;
   bool _searchAborted = false;
   int _generation = 0;
+  final List<List<int>> _moveBuffers = List.generate(
+    XqwlPosition.LIMIT_DEPTH + 1,
+    (_) => <int>[],
+  );
 
   final pos = XqwlPosition();
 
   bool get _timeLimitReached =>
       _maxThinkMs > 0 && _searchClock.elapsedMilliseconds >= _maxThinkMs;
 
-  bool _shouldStop() {
+  bool _shouldStop([bool forceClockCheck = false]) {
     if (_searchAborted) return true;
+    // Every root move is checked; inside the tree, one clock read per 64
+    // visited nodes keeps the deadline responsive without dominating search.
+    if (!forceClockCheck && (nodesSearched & 63) != 0) return false;
     if (_timeLimitReached) {
       _searchAborted = true;
       return true;
@@ -133,8 +144,7 @@ class XqwlSearch {
   void recordHash(int nFlag, int vl, int nDepth, int mv) {
     final index = pos.zobr.dwKey & (XqwlPosition.HASH_SIZE - 1);
     final hsh = hashTable[index];
-    final samePosition =
-        hsh.valid &&
+    final samePosition = hsh.valid &&
         hsh.dwLock0 == pos.zobr.dwLock0 &&
         hsh.dwLock1 == pos.zobr.dwLock1;
     if (samePosition && hsh.ucDepth > nDepth) {
@@ -207,7 +217,7 @@ class XqwlSearch {
     nodesSearched++;
     int i, nGenMoves;
     int vl, vlBest;
-    List<int> mvs = [];
+    final mvs = _moveBuffers[pos.nDistance];
     // 一个静态搜索分为以下几个阶段
 
     // 1. 检查重复局面
@@ -437,7 +447,7 @@ class XqwlSearch {
     SortStruct sort = SortStruct.init(this, mvResult);
 
     while ((mv = sort.next()) != 0) {
-      if (_shouldStop()) return vlBest;
+      if (_shouldStop(true)) return vlBest;
       if (pos.makeMove(mv)) {
         nNewDepth = pos.inCheck() ? nDepth : nDepth - 1;
         if (vlBest == -XqwlPosition.MATE_VALUE) {
@@ -459,7 +469,7 @@ class XqwlSearch {
           }
         }
         pos.undoMakeMove();
-        if (_shouldStop()) return vlBest;
+        if (_shouldStop(true)) return vlBest;
         if (vl > vlBest) {
           vlBest = vl;
           mvResult = mv;
@@ -473,10 +483,7 @@ class XqwlSearch {
   }
 
   // 迭代加深搜索过程
-  int evaluatePosition({
-    int maxDepth = XqwlPosition.LIMIT_DEPTH,
-    int maxThinkMs = 5000,
-  }) {
+  int evaluatePosition({int maxDepth = 0, int maxThinkMs = 5000}) {
     searchMain(
       maxDepth: maxDepth,
       maxThinkMs: maxThinkMs,
@@ -486,10 +493,18 @@ class XqwlSearch {
   }
 
   void searchMain({
-    int maxDepth = XqwlPosition.LIMIT_DEPTH,
+    int maxDepth = 0,
     int maxThinkMs = 5000,
     bool useOpeningBook = true,
+    int preferredMove = 0,
+    void Function(int move, int depth)? onCompletedDepth,
   }) {
+    if (maxThinkMs <= 0) {
+      throw ArgumentError.value(maxThinkMs, 'maxThinkMs', 'Must be positive');
+    }
+    // Automatic mode has no user-selected depth cap. LIMIT_DEPTH remains a
+    // stack-safety guard, including check extensions and quiescence search.
+    final depthLimit = maxDepth <= 0 ? XqwlPosition.LIMIT_DEPTH : maxDepth;
     _maxThinkMs = maxThinkMs;
     _searchAborted = false;
     nodesSearched = 0;
@@ -507,7 +522,7 @@ class XqwlSearch {
       _searchClock.stop();
       return;
     }
-    List<int> mvs = [];
+    final mvs = _moveBuffers[0];
 
     // 初始化
     nHistoryTable = List.filled(65536, 0); // 清空历史表
@@ -532,12 +547,27 @@ class XqwlSearch {
     // 检查是否只有唯一走法
     int vl = 0;
     var fallbackMove = 0;
+    var fallbackScore = -XqwlPosition.MATE_VALUE;
+    var hasHashMove = false;
     mvResult = 0;
     int nGenMoves = pos.generateMoves(mvs);
+    final hashMove = [0];
+    probeHash(-XqwlPosition.MATE_VALUE, XqwlPosition.MATE_VALUE, 1, hashMove);
     for (int i = 0; i < nGenMoves; i++) {
       if (pos.makeMove(mvs[i])) {
+        final score = -pos.evaluate();
         pos.undoMakeMove();
-        fallbackMove = mvs[i];
+        if (mvs[i] == preferredMove) {
+          hasHashMove = true;
+          fallbackMove = mvs[i];
+        } else if (preferredMove == 0 && mvs[i] == hashMove[0]) {
+          hasHashMove = true;
+          fallbackMove = mvs[i];
+        } else if (!hasHashMove &&
+            (score > fallbackScore || fallbackMove == 0)) {
+          fallbackScore = score;
+          fallbackMove = mvs[i];
+        }
         vl++;
       }
     }
@@ -556,13 +586,14 @@ class XqwlSearch {
       return;
     }
     if (vl == 0) {
-      scoreResult = pos.inCheck() ? -XqwlPosition.MATE_VALUE : 0;
+      // Xiangqi stalemate is a loss, even when the king is not in check.
+      scoreResult = -XqwlPosition.MATE_VALUE;
       _searchClock.stop();
       return;
     }
 
     // 迭代加深过程
-    for (int i = 1; i <= maxDepth && i <= XqwlPosition.LIMIT_DEPTH; i++) {
+    for (int i = 1; i <= depthLimit && i <= XqwlPosition.LIMIT_DEPTH; i++) {
       final fallbackMove = mvResult;
       vl = searchRoot(i);
       if (_searchAborted) {
@@ -571,12 +602,13 @@ class XqwlSearch {
       }
       completedDepth = i;
       scoreResult = vl;
+      onCompletedDepth?.call(mvResult, i);
       // 搜索到杀棋，就终止搜索
       if (vl > XqwlPosition.WIN_VALUE || vl < -XqwlPosition.WIN_VALUE) {
         break;
       }
-      // 超过一秒，就终止搜索
-      if (_timeLimitReached) break;
+      // A partial iteration never replaces the last completed move/score.
+      if (_shouldStop(true)) break;
     }
     _searchClock.stop();
   }
@@ -597,12 +629,13 @@ class SortStruct {
   int nPhase = 0;
   int nIndex = 0;
   int nGenMoves = 0;
-  List<int> mvs = [];
+  late List<int> mvs;
   bool _capturesGenerated = false;
   bool _quietsGenerated = false;
   final XqwlSearch s;
 
   SortStruct.init(this.s, int mvHash_) {
+    mvs = s._moveBuffers[s.pos.nDistance];
     mvHash = mvHash_;
     mvKiller1 = s.mvKillers[s.pos.nDistance][0];
     mvKiller2 = s.mvKillers[s.pos.nDistance][1];
