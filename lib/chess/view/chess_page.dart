@@ -25,6 +25,7 @@ import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
 
 import '../bloc/chess_bloc.dart';
+import 'chess_analysis_page.dart';
 import 'game_layout_policy.dart';
 
 class ChessPage extends StatefulWidget {
@@ -596,6 +597,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                                   onBack: _requestExit,
                                   onSettings: _showSettings,
                                   onMenu: _showGameMenu,
+                                  onAnalysis: _openAnalysis,
                                 )
                               : _MobileGameLayout(
                                   state: state,
@@ -606,6 +608,7 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                                       .read<ChessBloc>()
                                       .add(const ChessEventEvaluatePosition()),
                                   onNotation: _showNotation,
+                                  onAnalysis: _openAnalysis,
                                 ),
                         ),
                         if (state.phase == GamePhase.paused)
@@ -670,6 +673,46 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _openAnalysis() async {
+    final bloc = context.read<ChessBloc>();
+    final source = bloc.state;
+    if (!_canAnalyze(source)) return;
+    final origin = source.board.copyWith();
+    final themeBloc = context.read<ThemeBloc>();
+    var pausedByAnalysis = false;
+    if (source.canPause) {
+      final pauseResult = bloc.stream.firstWhere(
+        (state) =>
+            state.phase == GamePhase.paused ||
+            state.phase == GamePhase.finished,
+      );
+      bloc.add(const ChessEventPause());
+      final pausedState = await pauseResult.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => bloc.state,
+      );
+      pausedByAnalysis = pausedState.phase == GamePhase.paused;
+    }
+    if (!mounted) return;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => BlocProvider.value(
+            value: themeBloc,
+            child: ChessAnalysisPage(
+              origin: origin,
+              initialFen: bloc.initialFen,
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted && pausedByAnalysis && bloc.state.canResume) {
+        bloc.add(const ChessEventResume());
+      }
+    }
+  }
+
   Future<void> _showGameMenu() async {
     final bloc = context.read<ChessBloc>();
     final state = bloc.state;
@@ -713,6 +756,15 @@ class _ChessViewState extends State<ChessView> with WidgetsBindingObserver {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _showSettings();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.account_tree_outlined),
+                title: const Text('棋局拆解'),
+                enabled: _canAnalyze(state),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _openAnalysis();
                 },
               ),
               ListTile(
@@ -784,6 +836,7 @@ class _MobileGameLayout extends StatelessWidget {
     required this.onMenu,
     required this.onEvaluate,
     required this.onNotation,
+    required this.onAnalysis,
   });
 
   final ChessState state;
@@ -792,6 +845,7 @@ class _MobileGameLayout extends StatelessWidget {
   final VoidCallback onMenu;
   final VoidCallback onEvaluate;
   final VoidCallback onNotation;
+  final VoidCallback onAnalysis;
 
   @override
   Widget build(BuildContext context) {
@@ -830,6 +884,7 @@ class _MobileGameLayout extends StatelessWidget {
           onNotation: onNotation,
           onMenu: onMenu,
           onEvaluate: onEvaluate,
+          onAnalysis: onAnalysis,
         ),
       ],
     );
@@ -845,6 +900,7 @@ class _DesktopGameLayout extends StatelessWidget {
     required this.onBack,
     required this.onSettings,
     required this.onMenu,
+    required this.onAnalysis,
   });
 
   final ChessState state;
@@ -854,6 +910,7 @@ class _DesktopGameLayout extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onSettings;
   final VoidCallback onMenu;
+  final VoidCallback onAnalysis;
 
   @override
   Widget build(BuildContext context) {
@@ -895,6 +952,7 @@ class _DesktopGameLayout extends StatelessWidget {
                           onTabChanged: onInspectorTabChanged,
                           onSettings: onSettings,
                           onMenu: onMenu,
+                          onAnalysis: onAnalysis,
                         ),
                       ),
                     ],
@@ -1099,6 +1157,7 @@ class _DesktopInspector extends StatelessWidget {
     required this.onTabChanged,
     required this.onSettings,
     required this.onMenu,
+    required this.onAnalysis,
   });
 
   final ChessState state;
@@ -1107,6 +1166,7 @@ class _DesktopInspector extends StatelessWidget {
   final ValueChanged<int> onTabChanged;
   final VoidCallback onSettings;
   final VoidCallback onMenu;
+  final VoidCallback onAnalysis;
 
   @override
   Widget build(BuildContext context) {
@@ -1160,6 +1220,7 @@ class _DesktopInspector extends StatelessWidget {
           onNotation: () => onTabChanged(0),
           onMenu: onMenu,
           onEvaluate: onEvaluate,
+          onAnalysis: onAnalysis,
           desktop: true,
         ),
       ],
@@ -1588,6 +1649,7 @@ class _GameCommandBar extends StatelessWidget {
     required this.onNotation,
     required this.onMenu,
     required this.onEvaluate,
+    required this.onAnalysis,
     this.desktop = false,
   });
 
@@ -1595,6 +1657,7 @@ class _GameCommandBar extends StatelessWidget {
   final VoidCallback onNotation;
   final VoidCallback onMenu;
   final VoidCallback onEvaluate;
+  final VoidCallback onAnalysis;
   final bool desktop;
 
   @override
@@ -1632,6 +1695,11 @@ class _GameCommandBar extends StatelessWidget {
               : null,
         ),
       _GameCommand(label: '棋谱', icon: Icons.list_alt, onPressed: onNotation),
+      _GameCommand(
+        label: '拆解',
+        icon: Icons.account_tree_outlined,
+        onPressed: _canAnalyze(state) ? onAnalysis : null,
+      ),
       if (!desktop)
         _GameCommand(
           label: state.isEvaluating ? '评分中' : '评分',
@@ -2188,6 +2256,13 @@ String _modeTitle(PlayMode mode) {
     PlayMode.withNetwork => '联网对局',
   };
 }
+
+bool _canAnalyze(ChessState state) =>
+    state.presentations.isEmpty &&
+    (state.phase == GamePhase.playerTurn ||
+        state.phase == GamePhase.aiThinking ||
+        state.phase == GamePhase.paused ||
+        state.phase == GamePhase.finished);
 
 String _aiStrengthLabel(ChessState state, PlaySide side) {
   final strength = state.playMode == PlayMode.withAIvsAI

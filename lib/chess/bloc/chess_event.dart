@@ -87,6 +87,15 @@ class ChessEventMoveRequested extends ChessEvent {
   List<Object?> get props => [move];
 }
 
+class ChessEventAnalysisLoadBoard extends ChessEvent {
+  const ChessEventAnalysisLoadBoard(this.board);
+
+  final Board board;
+
+  @override
+  List<Object?> get props => [board];
+}
+
 @Deprecated('Use ChessEventMoveRequested')
 class ChessEventMoveBegin extends ChessEventMoveRequested {
   const ChessEventMoveBegin(super.move);

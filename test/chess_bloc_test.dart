@@ -21,6 +21,17 @@ void main() {
     await bloc.close();
   });
 
+  test('analysis board replacement is ignored by a real local game', () async {
+    final bloc = _bloc();
+    await _initialize(bloc, PlayMode.withSelf);
+    final initial = bloc.state.board;
+    final proposed = _apply(initial, initial.getMoves().first);
+    bloc.add(ChessEventAnalysisLoadBoard(proposed));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(bloc.state.board, initial);
+    await bloc.close();
+  });
+
   test(
     'clock switches sides, pauses, persists, and awards a timeout',
     () async {

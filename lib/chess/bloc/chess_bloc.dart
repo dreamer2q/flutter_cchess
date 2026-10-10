@@ -21,6 +21,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     this.initialFen = initialFenString,
     ChessEnginePort? engine,
     ChessEnginePort? analysisEngine,
+    this.analysisMode = false,
     int Function()? clockNowMs,
     String? gameId,
     DateTime? createdAt,
@@ -34,6 +35,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
     on<ChessEventAiSettingsChanged>(_onAiSettingsChanged);
     on<ChessEventBoardTap>(_onBoardTapped);
     on<ChessEventMoveRequested>(_onMoveRequested);
+    on<ChessEventAnalysisLoadBoard>(_onAnalysisLoadBoard);
     on<ChessEventPresentationAcknowledged>(_onPresentationAcknowledged);
     on<ChessEventPresentationAnimationCompleted>(
       _onPresentationAnimationCompleted,
@@ -61,6 +63,7 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
   final String initialFen;
   final ChessEnginePort? _providedEngine;
   final ChessEnginePort? _providedAnalysisEngine;
+  final bool analysisMode;
   final int Function()? _clockNowMs;
   final Stopwatch _monotonic = Stopwatch()..start();
   final String gameId;
@@ -320,6 +323,30 @@ class ChessBloc extends Bloc<ChessEvent, ChessState> {
       return;
     }
     _commitMove(event.move, emit, requestAi: state.playMode == PlayMode.withAI);
+  }
+
+  void _onAnalysisLoadBoard(
+    ChessEventAnalysisLoadBoard event,
+    Emitter<ChessState> emit,
+  ) {
+    if (!analysisMode || state.playMode != PlayMode.withSelf) return;
+    _evaluationGeneration++;
+    emit(
+      state.copyWith(
+        board: event.board,
+        phase: GamePhase.playerTurn,
+        presentations: BuiltList<PresentationEffect>(),
+        lastMove: event.board.lastMoves.isEmpty
+            ? null
+            : event.board.lastMoves.last,
+        clearLastMove: event.board.lastMoves.isEmpty,
+        clearSelected: true,
+        clearHintMoves: true,
+        clearResult: true,
+        clearFailure: true,
+        clearAiEvaluation: true,
+      ),
+    );
   }
 
   void _commitMove(
