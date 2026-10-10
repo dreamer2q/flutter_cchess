@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +19,7 @@ import 'package:flutter_cchess/models/piece.dart';
 import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
+import 'package:flutter_cchess/theme/app_chrome.dart';
 import 'package:flutter_cchess/theme/themes/board_theme.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
 import 'package:flutter_cchess/utils/utils.dart';
@@ -1181,6 +1181,7 @@ class _DesktopInspector extends StatelessWidget {
               child: Column(
                 children: [
                   SegmentedButton<int>(
+                    expandedInsets: EdgeInsets.zero,
                     showSelectedIcon: false,
                     segments: const [
                       ButtonSegment(
@@ -1905,20 +1906,7 @@ class _GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: _GameColors.surface.withValues(alpha: .88),
-            borderRadius: borderRadius,
-            border: Border.all(color: _GameColors.border),
-          ),
-          child: child,
-        ),
-      ),
-    );
+    return AppGlassSurface(borderRadius: borderRadius, child: child);
   }
 }
 
@@ -1933,15 +1921,7 @@ class _GameBackdrop extends StatelessWidget {
     final asset = desktop
         ? theme.desktopBackgroundAsset
         : theme.mobileBackgroundAsset;
-    if (asset == null) {
-      return const ColoredBox(color: _GameColors.mobileCanvas);
-    }
-    return Image.asset(
-      asset,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-    );
+    return AppBackdrop(asset: asset, child: const SizedBox.expand());
   }
 }
 
@@ -2342,13 +2322,12 @@ String _pieceSemantic(ChessPiece piece, PiecePos position) {
 class _GameColors {
   const _GameColors._();
 
-  static const mobileCanvas = Color(0xFFECE9E1);
-  static const surface = Color(0xFFFFFFFF);
-  static const border = Color(0x33717F7B);
-  static const ink = Color(0xFF202625);
-  static const muted = Color(0xFF68716E);
+  static const mobileCanvas = AppPalette.canvas;
+  static const border = AppPalette.border;
+  static const ink = AppPalette.ink;
+  static const muted = AppPalette.muted;
   static const inactive = Color(0xFF9EA5A2);
-  static const jade = Color(0xFF2D9B73);
+  static const jade = AppPalette.accent;
   static const hint = Color(0xFFD29A43);
 }
 

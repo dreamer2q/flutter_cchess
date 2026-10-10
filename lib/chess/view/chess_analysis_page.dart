@@ -9,6 +9,7 @@ import 'package:flutter_cchess/chess/game/analysis_line.dart';
 import 'package:flutter_cchess/chess/notation/chinese_notation.dart';
 import 'package:flutter_cchess/models/board.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
+import 'package:flutter_cchess/theme/app_chrome.dart';
 import 'package:flutter_cchess/timer/ticker.dart';
 
 import 'chess_page.dart';
@@ -86,9 +87,15 @@ class _ChessAnalysisPageState extends State<ChessAnalysisPage> {
           builder: (context, state) {
             final theme = context.select((ThemeBloc bloc) => bloc.state.theme);
             return Scaffold(
-              backgroundColor: const Color(0xFFF0F2F1),
+              backgroundColor: AppPalette.canvas,
               appBar: AppBar(
                 title: const Text('棋局拆解'),
+                flexibleSpace: const AppBackdrop(
+                  child: AppGlassSurface(
+                    borderRadius: BorderRadius.zero,
+                    child: SizedBox.expand(),
+                  ),
+                ),
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back),
                   tooltip: '返回对局',
@@ -103,10 +110,12 @@ class _ChessAnalysisPageState extends State<ChessAnalysisPage> {
                       : theme.mobileBackgroundAsset;
                   return Stack(
                     children: [
-                      if (backdrop != null)
-                        Positioned.fill(
-                          child: Image.asset(backdrop, fit: BoxFit.cover),
+                      Positioned.fill(
+                        child: AppBackdrop(
+                          asset: backdrop,
+                          child: const SizedBox.expand(),
                         ),
+                      ),
                       SafeArea(
                         child: desktop
                             ? Row(
@@ -163,8 +172,7 @@ class _ChessAnalysisPageState extends State<ChessAnalysisPage> {
       _line.fullBoard,
     ).skip(_line.originPly).toList(growable: false);
     final busy = state.presentations.isNotEmpty;
-    return Material(
-      color: const Color(0xF5F6F7F5),
+    return AppGlassSurface(
       child: Column(
         children: [
           Padding(

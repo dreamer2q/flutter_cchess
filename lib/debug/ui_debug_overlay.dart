@@ -6,9 +6,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 class UiDebugOverlay extends StatefulWidget {
-  const UiDebugOverlay({super.key, required this.child});
+  const UiDebugOverlay({super.key, required this.child, this.enabled = true});
 
   final Widget child;
+  final bool enabled;
 
   @override
   State<UiDebugOverlay> createState() => _UiDebugOverlayState();
@@ -63,7 +64,7 @@ class _UiDebugOverlayState extends State<UiDebugOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return widget.child;
+    if (!kDebugMode || !widget.enabled) return widget.child;
 
     return Focus(
       autofocus: true,
