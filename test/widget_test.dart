@@ -5,6 +5,7 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_cchess/help/help_pages.dart';
@@ -19,6 +20,7 @@ void main() {
     expect(find.text('中国象棋'), findsOneWidget);
     expect(find.text('人机对局'), findsOneWidget);
     expect(find.text('本地双人'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ui-debug-toggle')), findsNothing);
   });
 
   testWidgets('home exposes rules help and about pages', (tester) async {

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
-import 'package:flutter_cchess/chess/game/ai_time_budget.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
+import 'package:flutter_cchess/theme/app_chrome.dart';
 
 import 'game_settings.dart';
 
@@ -36,7 +36,7 @@ class _GameSettingsPageState extends State<GameSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F1EC),
+      backgroundColor: AppPalette.canvas,
       appBar: AppBar(
         leading: IconButton(
           tooltip: '返回对局',
@@ -44,50 +44,58 @@ class _GameSettingsPageState extends State<GameSettingsPage> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
         ),
         title: const Text('设置'),
-        backgroundColor: const Color(0xFFF2F1EC),
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
+        flexibleSpace: const AppBackdrop(
+          child: AppGlassSurface(
+            borderRadius: BorderRadius.zero,
+            child: SizedBox.expand(),
+          ),
+        ),
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth >= 760) {
-            return Row(
-              children: [
-                SizedBox(
-                  width: 232,
-                  child: _SettingsSidebar(
-                    selected: _selectedSection,
-                    onSelected: (section) =>
-                        setState(() => _selectedSection = section),
+      body: AppBackdrop(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 760) {
+              return Row(
+                children: [
+                  SizedBox(
+                    width: 232,
+                    child: _SettingsSidebar(
+                      selected: _selectedSection,
+                      onSelected: (section) =>
+                          setState(() => _selectedSection = section),
+                    ),
                   ),
-                ),
-                const VerticalDivider(width: 1, thickness: 1),
-                Expanded(
-                  child: _SettingsDetail(
-                    section: _selectedSection,
+                  const VerticalDivider(width: 1, thickness: 1),
+                  Expanded(
+                    child: _SettingsDetail(
+                      section: _selectedSection,
+                      settings: _settings,
+                      onUpdate: _update,
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
+              children: [
+                for (final section in _SettingsSection.values) ...[
+                  _SettingsDetail(
+                    section: section,
                     settings: _settings,
                     onUpdate: _update,
+                    compact: true,
                   ),
-                ),
+                  if (section != _SettingsSection.values.last)
+                    const SizedBox(height: 28),
+                ],
               ],
             );
-          }
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
-            children: [
-              for (final section in _SettingsSection.values) ...[
-                _SettingsDetail(
-                  section: section,
-                  settings: _settings,
-                  onUpdate: _update,
-                  compact: true,
-                ),
-                if (section != _SettingsSection.values.last)
-                  const SizedBox(height: 28),
-              ],
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -95,9 +103,9 @@ class _GameSettingsPageState extends State<GameSettingsPage> {
 
 enum _SettingsSection {
   appearance('棋盘外观', '更换棋盘主题与棋子风格', Icons.palette_outlined),
-  ai('电脑对手', '设置电脑强度与思考时间', Icons.smart_toy_outlined),
-  feedback('声音与触觉', '控制对局中的声音与设备反馈', Icons.volume_up_outlined),
-  motion('动态效果', '调整棋子动画与界面动效', Icons.motion_photos_on_outlined);
+  ai('电脑对手', '调整电脑难度与思考方式', Icons.smart_toy_outlined),
+  feedback('声音与触觉', '控制声音与设备反馈', Icons.volume_up_outlined),
+  motion('动画与显示', '调整棋子动画与界面动效', Icons.motion_photos_on_outlined);
 
   const _SettingsSection(this.title, this.subtitle, this.icon);
 
@@ -225,15 +233,31 @@ class _SettingsDetail extends StatelessWidget {
             context,
           ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF68716E)),
         ),
+        if (section == _SettingsSection.appearance)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              '偏好会立即保存到本机。新对局的用时和电脑难度会在开始时选择。',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF68716E)),
+            ),
+          ),
         const SizedBox(height: 24),
         detail,
       ],
     );
 
     if (compact) return content;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(40, 32, 40, 40),
-      child: SizedBox(width: double.infinity, child: content),
+    return Align(
+      alignment: Alignment.topLeft,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(40, 28, 40, 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: content,
+        ),
+      ),
     );
   }
 
@@ -241,32 +265,55 @@ class _SettingsDetail extends StatelessWidget {
     return _SettingsGroup(
       title: '棋盘主题',
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: SegmentedButton<String>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                value: GameSettings.defaultThemeConfigAsset,
-                icon: Icon(Icons.grid_4x4),
-                label: Text('经典木纹'),
-              ),
-              ButtonSegment(
-                value: 'assets/skins/night/config.json',
-                icon: Icon(Icons.dark_mode_outlined),
-                label: Text('夜间胡桃木'),
-              ),
-              ButtonSegment(
-                value: 'assets/skins/qqclassic/config.json',
-                icon: Icon(Icons.palette_outlined),
-                label: Text('暖木经典'),
-              ),
-            ],
-            selected: {settings.themeConfigAsset},
-            onSelectionChanged: (selection) =>
-                onUpdate(settings.copyWith(themeConfigAsset: selection.first)),
+        for (final choice in const [
+          (
+            GameSettings.defaultThemeConfigAsset,
+            '经典木纹',
+            '浅色棋盘，清晰易读',
+            'assets/skins/woods/board.jpg',
           ),
-        ),
+          (
+            'assets/skins/night/config.json',
+            '夜间胡桃木',
+            '深色棋盘，金色棋线',
+            'assets/skins/night/board.png',
+          ),
+          (
+            'assets/skins/qqclassic/config.json',
+            '暖木经典',
+            '暖色棋盘，传统棋子',
+            'assets/skins/qqclassic/board.png',
+          ),
+        ])
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 6,
+            ),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.asset(
+                choice.$4,
+                width: 44,
+                height: 50,
+                fit: BoxFit.cover,
+              ),
+            ),
+            title: Text(choice.$2),
+            subtitle: Text(choice.$3),
+            selected: settings.themeConfigAsset == choice.$1,
+            selectedTileColor: const Color(0x10176B50),
+            trailing: Icon(
+              settings.themeConfigAsset == choice.$1
+                  ? Icons.check_circle_rounded
+                  : Icons.circle_outlined,
+              color: settings.themeConfigAsset == choice.$1
+                  ? AppPalette.accent
+                  : AppPalette.muted,
+            ),
+            onTap: () =>
+                onUpdate(settings.copyWith(themeConfigAsset: choice.$1)),
+          ),
       ],
     );
   }
@@ -283,13 +330,6 @@ class _SettingsDetail extends StatelessWidget {
               onUpdate(settings.copyWith(soundEnabled: value)),
         ),
         const _SettingsDivider(),
-        const ListTile(
-          title: Text('背景音乐'),
-          subtitle: Text('音乐尚未提供'),
-          trailing: Icon(Icons.hourglass_empty_rounded, size: 19),
-          enabled: false,
-        ),
-        const _SettingsDivider(),
         SwitchListTile.adaptive(
           title: const Text('触觉反馈'),
           subtitle: const Text('移动设备上的落子与非法操作反馈'),
@@ -303,11 +343,12 @@ class _SettingsDetail extends StatelessWidget {
 
   Widget _ai(BuildContext context) {
     return _SettingsGroup(
-      title: '电脑思考',
+      title: '电脑怎么想',
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: SegmentedButton<AiStrength>(
+            expandedInsets: EdgeInsets.zero,
             showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: AiStrength.easy, label: Text('入门')),
@@ -340,6 +381,7 @@ class _SettingsDetail extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: SegmentedButton<MotionPreference>(
+            expandedInsets: EdgeInsets.zero,
             showSelectedIcon: false,
             segments: const [
               ButtonSegment(
@@ -416,36 +458,42 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
                 ),
               ),
             ),
-          Row(
-            children: [
-              const Expanded(child: Text('思考强度基准')),
-              Text(_formatThinkTime(thinkMs)),
-            ],
-          ),
-          Slider(
-            value: _thinkMs,
-            min: 100,
-            max: AiStrength.maxConfiguredThinkMs.toDouble(),
-            divisions: (AiStrength.maxConfiguredThinkMs - 100) ~/ 50,
-            label: _formatThinkTime(thinkMs),
-            onChanged: (value) => setState(() => _thinkMs = value),
-            onChangeEnd: (value) => widget.onUpdate(
-              widget.settings.copyWith(aiMaxThinkMs: value.round()),
-            ),
-          ),
           Text(
-            '15分钟开局约 ${_formatThinkTime(aiTimeBudgetMs(strength: widget.settings.aiStrength, configuredThinkMs: thinkMs, remainingMs: 900000, timedGame: true))}；之后随剩余时间缩短。玩家回合也会预想应手；无棋钟时使用此基准时间。',
+            '入门适合熟悉规则，普通适合日常练习，较强会思考更久。这里的选择作为新对局的默认难度。',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: const Color(0xFF68716E)),
           ),
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
-            title: const Text('高级：限制搜索深度'),
-            subtitle: Text(
-              depth == 0 ? '自动 · 按时间搜索（推荐）' : '最多 $depth 层，可能提前落子',
-            ),
+            title: const Text('高级电脑设置'),
+            subtitle: Text(depth == 0 ? '自动安排（推荐）' : '最多 $depth 层，可能提前落子'),
             children: [
+              Row(
+                children: [
+                  const Expanded(child: Text('电脑思考时间参考')),
+                  Text(_formatThinkTime(thinkMs)),
+                ],
+              ),
+              Slider(
+                value: _thinkMs,
+                min: 100,
+                max: AiStrength.maxConfiguredThinkMs.toDouble(),
+                divisions: (AiStrength.maxConfiguredThinkMs - 100) ~/ 50,
+                label: _formatThinkTime(thinkMs),
+                onChanged: (value) => setState(() => _thinkMs = value),
+                onChangeEnd: (value) => widget.onUpdate(
+                  widget.settings.copyWith(aiMaxThinkMs: value.round()),
+                ),
+              ),
+              const Text('有棋钟时，电脑会结合剩余用时自动调整。'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(child: Text('搜索深度上限')),
+                  Text(depth == 0 ? '自动（推荐）' : '$depth 层'),
+                ],
+              ),
               Slider(
                 value: _depth,
                 min: 0,
@@ -456,6 +504,16 @@ class _AiSearchLimitsState extends State<_AiSearchLimits> {
                 onChangeEnd: (value) => widget.onUpdate(
                   widget.settings.copyWith(aiMaxDepth: value.round()),
                 ),
+              ),
+              TextButton.icon(
+                onPressed: () => widget.onUpdate(
+                  widget.settings.copyWith(
+                    aiMaxDepth: widget.settings.aiStrength.maxDepth,
+                    aiMaxThinkMs: widget.settings.aiStrength.maxThinkMs,
+                  ),
+                ),
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('恢复推荐设置'),
               ),
             ],
           ),
@@ -489,14 +547,8 @@ class _SettingsGroup extends StatelessWidget {
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
-        Material(
+        AppGlassSurface(
           key: ValueKey('settings-group-$title'),
-          color: const Color(0xEFFFFFFF),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0x26717F7B)),
-          ),
-          clipBehavior: Clip.antiAlias,
           child: Column(mainAxisSize: MainAxisSize.min, children: children),
         ),
       ],

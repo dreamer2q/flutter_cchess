@@ -4,12 +4,12 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter_cchess/chess/bloc/chess_bloc.dart';
 import 'package:flutter_cchess/chess/game/ai_strength.dart';
 import 'package:flutter_cchess/chess/notation/game_notation.dart';
-import 'package:flutter_cchess/chess/theme/wood_theme.dart';
 import 'package:flutter_cchess/chess/view/chess_page.dart';
 import 'package:flutter_cchess/help/help_pages.dart';
 import 'package:flutter_cchess/settings/settings.dart';
 import 'package:flutter_cchess/storage/storage.dart';
 import 'package:flutter_cchess/theme/bloc/theme_bloc.dart';
+import 'package:flutter_cchess/theme/app_chrome.dart';
 import 'package:flutter_cchess/utils/fen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -48,50 +48,47 @@ class _NewChessPageState extends State<NewChessPage> {
       builder: (context, snapshot) {
         final data = snapshot.data ?? const _HomeData();
         final currentGame = data.currentGame;
-        final aiStrength = _selectedStrength ?? data.settings.aiStrength;
-        return Scaffold(
-          backgroundColor: const Color(0xFFF0F2F1),
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final desktop = constraints.maxWidth >= 860;
-                return Column(
-                  children: [
-                    _HomeHeader(
-                      onHelp: _openRules,
-                      onAbout: _openAbout,
-                      onSettings: () => _openSettings(data.settings),
-                    ),
-                    Expanded(
-                      child: desktop
-                          ? _DesktopHome(
-                              currentGame: currentGame,
-                              onOpen: (mode) => _openGame(mode, data.settings),
-                              onContinue: _continueGame,
-                              onImport: _importRecord,
-                              timeControlSeconds: _timeControlSeconds,
-                              aiStrength: aiStrength,
-                              onTimeChanged: (value) =>
-                                  setState(() => _timeControlSeconds = value),
-                              onStrengthChanged: (value) =>
-                                  setState(() => _selectedStrength = value),
-                            )
-                          : _MobileHome(
-                              currentGame: currentGame,
-                              onOpen: (mode) => _openGame(mode, data.settings),
-                              onContinue: _continueGame,
-                              onImport: _importRecord,
-                              timeControlSeconds: _timeControlSeconds,
-                              aiStrength: aiStrength,
-                              onTimeChanged: (value) =>
-                                  setState(() => _timeControlSeconds = value),
-                              onStrengthChanged: (value) =>
-                                  setState(() => _selectedStrength = value),
-                            ),
-                    ),
-                  ],
-                );
-              },
+        return BlocProvider(
+          key: ValueKey(data.settings.themeConfigAsset),
+          create: (_) =>
+              ThemeBloc()
+                ..add(ThemeAssetRequested(data.settings.themeConfigAsset)),
+          child: Scaffold(
+            backgroundColor: AppPalette.canvas,
+            body: AppBackdrop(
+              child: SafeArea(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final desktop = constraints.maxWidth >= 860;
+                    return Column(
+                      children: [
+                        _HomeHeader(
+                          onHelp: _openRules,
+                          onAbout: _openAbout,
+                          onSettings: () => _openSettings(data.settings),
+                        ),
+                        Expanded(
+                          child: desktop
+                              ? _DesktopHome(
+                                  currentGame: currentGame,
+                                  onOpen: (mode) =>
+                                      _openGame(mode, data.settings),
+                                  onContinue: _continueGame,
+                                  onImport: _importRecord,
+                                )
+                              : _MobileHome(
+                                  currentGame: currentGame,
+                                  onOpen: (mode) =>
+                                      _openGame(mode, data.settings),
+                                  onContinue: _continueGame,
+                                  onImport: _importRecord,
+                                ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         );
@@ -121,6 +118,44 @@ class _NewChessPageState extends State<NewChessPage> {
             redAiMaxDepth: config.redDepth,
             blackAiMaxDepth: config.blackDepth,
             aiVsAiStepDelayMs: config.stepDelayMs,
+          ),
+        ),
+      );
+      _reloadHome();
+      return;
+    }
+    if (playMode == PlayMode.withAI || playMode == PlayMode.withSelf) {
+      final config = await showDialog<_HumanVsAiConfig>(
+        context: context,
+        builder: (_) => _GameSetupDialog(
+          localTwoPlayer: playMode == PlayMode.withSelf,
+          initialTimeControlSeconds: _timeControlSeconds,
+          initialStrength: _selectedStrength ?? settings.aiStrength,
+          initialMaxDepth:
+              _selectedStrength == null ||
+                  _selectedStrength == settings.aiStrength
+              ? settings.aiMaxDepth
+              : _selectedStrength!.maxDepth,
+          initialMaxThinkMs:
+              _selectedStrength == null ||
+                  _selectedStrength == settings.aiStrength
+              ? settings.aiMaxThinkMs
+              : _selectedStrength!.maxThinkMs,
+        ),
+      );
+      if (config == null || !mounted) return;
+      setState(() {
+        _timeControlSeconds = config.timeControlSeconds;
+        _selectedStrength = config.strength;
+      });
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChessPage(
+            playMode: playMode,
+            timeControlSeconds: config.timeControlSeconds,
+            aiStrength: config.strength,
+            aiMaxDepth: config.maxDepth,
+            aiMaxThinkMs: config.maxThinkMs,
           ),
         ),
       );
@@ -253,48 +288,55 @@ class _HomeHeader extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final showMode = constraints.maxWidth >= 420;
-        return SizedBox(
-          height: 64,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                const Icon(Icons.grid_4x4, color: Color(0xFF202625), size: 22),
-                const SizedBox(width: 12),
-                Text(
-                  '中国象棋',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: const Color(0xFF202625),
-                    fontWeight: FontWeight.w700,
+        return AppGlassSurface(
+          borderRadius: BorderRadius.zero,
+          child: SizedBox(
+            height: 64,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.grid_4x4,
+                    color: Color(0xFF202625),
+                    size: 22,
                   ),
-                ),
-                const Spacer(),
-                if (showMode)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: Text(
-                      '离线对局',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF68716E),
-                      ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '中国象棋',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: const Color(0xFF202625),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                IconButton(
-                  tooltip: '象棋规则',
-                  onPressed: onHelp,
-                  icon: const Icon(Icons.help_outline_rounded),
-                ),
-                IconButton(
-                  tooltip: '关于中国象棋',
-                  onPressed: onAbout,
-                  icon: const Icon(Icons.info_outline_rounded),
-                ),
-                IconButton(
-                  tooltip: '设置',
-                  onPressed: onSettings,
-                  icon: const Icon(Icons.settings_outlined),
-                ),
-              ],
+                  const Spacer(),
+                  if (showMode)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Text(
+                        '离线对局',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFF68716E),
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    tooltip: '象棋规则',
+                    onPressed: onHelp,
+                    icon: const Icon(Icons.help_outline_rounded),
+                  ),
+                  IconButton(
+                    tooltip: '关于中国象棋',
+                    onPressed: onAbout,
+                    icon: const Icon(Icons.info_outline_rounded),
+                  ),
+                  IconButton(
+                    tooltip: '设置',
+                    onPressed: onSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -309,20 +351,12 @@ class _DesktopHome extends StatelessWidget {
     required this.onContinue,
     required this.onImport,
     required this.currentGame,
-    required this.timeControlSeconds,
-    required this.aiStrength,
-    required this.onTimeChanged,
-    required this.onStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
   final ValueChanged<GameRecord> onContinue;
   final VoidCallback onImport;
   final GameRecord? currentGame;
-  final int timeControlSeconds;
-  final AiStrength aiStrength;
-  final ValueChanged<int> onTimeChanged;
-  final ValueChanged<AiStrength> onStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -343,10 +377,6 @@ class _DesktopHome extends StatelessWidget {
                     onContinue: onContinue,
                     onImport: onImport,
                     currentGame: currentGame,
-                    timeControlSeconds: timeControlSeconds,
-                    aiStrength: aiStrength,
-                    onTimeChanged: onTimeChanged,
-                    onStrengthChanged: onStrengthChanged,
                   ),
                 ),
               ),
@@ -364,20 +394,12 @@ class _MobileHome extends StatelessWidget {
     required this.onContinue,
     required this.onImport,
     required this.currentGame,
-    required this.timeControlSeconds,
-    required this.aiStrength,
-    required this.onTimeChanged,
-    required this.onStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
   final ValueChanged<GameRecord> onContinue;
   final VoidCallback onImport;
   final GameRecord? currentGame;
-  final int timeControlSeconds;
-  final AiStrength aiStrength;
-  final ValueChanged<int> onTimeChanged;
-  final ValueChanged<AiStrength> onStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -385,18 +407,14 @@ class _MobileHome extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
       child: Column(
         children: [
-          const SizedBox(height: 330, child: _BoardPreview()),
-          const SizedBox(height: 20),
           _ModeChooser(
             onOpen: onOpen,
             onContinue: onContinue,
             onImport: onImport,
             currentGame: currentGame,
-            timeControlSeconds: timeControlSeconds,
-            aiStrength: aiStrength,
-            onTimeChanged: onTimeChanged,
-            onStrengthChanged: onStrengthChanged,
           ),
+          const SizedBox(height: 16),
+          const SizedBox(height: 220, child: _BoardPreview()),
         ],
       ),
     );
@@ -410,9 +428,10 @@ class _BoardPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<ThemeBloc>().state.theme;
     return Center(
       child: AspectRatio(
-        aspectRatio: 521 / 577,
+        aspectRatio: theme.boardSize.aspectRatio,
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
@@ -429,19 +448,14 @@ class _BoardPreview extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.contain,
               child: SizedBox(
-                width: 521,
-                height: 577,
+                width: theme.boardSize.width,
+                height: theme.boardSize.height,
                 child: Stack(
                   children: [
-                    Image.asset(
-                      'assets/skins/woods/board.jpg',
-                      width: 521,
-                      height: 577,
-                      fit: BoxFit.fill,
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                      child: _PreviewPieces(),
+                    theme.buildBoard(context),
+                    Padding(
+                      padding: theme.boardPadding,
+                      child: const _PreviewPieces(),
                     ),
                   ],
                 ),
@@ -459,7 +473,7 @@ class _PreviewPieces extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const theme = WoodsBoardTheme();
+    final theme = context.watch<ThemeBloc>().state.theme;
     return Stack(
       children: _BoardPreview._opening.pcPairs
           .map(
@@ -479,20 +493,12 @@ class _ModeChooser extends StatelessWidget {
     required this.onContinue,
     required this.onImport,
     required this.currentGame,
-    required this.timeControlSeconds,
-    required this.aiStrength,
-    required this.onTimeChanged,
-    required this.onStrengthChanged,
   });
 
   final ValueChanged<PlayMode> onOpen;
   final ValueChanged<GameRecord> onContinue;
   final VoidCallback onImport;
   final GameRecord? currentGame;
-  final int timeControlSeconds;
-  final AiStrength aiStrength;
-  final ValueChanged<int> onTimeChanged;
-  final ValueChanged<AiStrength> onStrengthChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -516,66 +522,15 @@ class _ModeChooser extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF68716E)),
           ),
-          const SizedBox(height: 22),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final timeField = DropdownButtonFormField<int>(
-                initialValue: timeControlSeconds,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '每方用时',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 300, child: Text('5 分钟')),
-                  DropdownMenuItem(value: 600, child: Text('10 分钟')),
-                  DropdownMenuItem(value: 900, child: Text('15 分钟')),
-                  DropdownMenuItem(value: 1800, child: Text('30 分钟')),
-                  DropdownMenuItem(value: 0, child: Text('不限时')),
-                ],
-                onChanged: (value) {
-                  if (value != null) onTimeChanged(value);
-                },
-              );
-              final strengthField = DropdownButtonFormField<AiStrength>(
-                initialValue: aiStrength,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '电脑强度',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: AiStrength.easy, child: Text('入门')),
-                  DropdownMenuItem(value: AiStrength.normal, child: Text('普通')),
-                  DropdownMenuItem(value: AiStrength.hard, child: Text('较强')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    onStrengthChanged(value);
-                  }
-                },
-              );
-              if (constraints.maxWidth < 340) {
-                return Column(
-                  children: [
-                    timeField,
-                    const SizedBox(height: 12),
-                    strengthField,
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: timeField),
-                  const SizedBox(width: 12),
-                  Expanded(child: strengthField),
-                ],
-              );
-            },
+          TextButton.icon(
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const XiangqiRulesPage()),
+            ),
+            icon: const Icon(Icons.help_outline_rounded, size: 18),
+            label: const Text('第一次玩？查看象棋规则'),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
           if (currentGame != null) ...[
             _ModeButton(
               icon: Icons.play_arrow,
@@ -590,7 +545,7 @@ class _ModeChooser extends StatelessWidget {
           _ModeButton(
             icon: Icons.smart_toy_outlined,
             title: '人机对局',
-            description: '执红先行，与本地引擎对弈',
+            description: '和电脑下，开始前选择用时和难度',
             emphasized: currentGame == null,
             onTap: () => onOpen(PlayMode.withAI),
           ),
@@ -598,7 +553,7 @@ class _ModeChooser extends StatelessWidget {
           _ModeButton(
             icon: Icons.smart_toy,
             title: 'AI 对战',
-            description: '红方电脑 · 黑方电脑',
+            description: '观看两台电脑自动对弈',
             onTap: () => onOpen(PlayMode.withAIvsAI),
           ),
           const SizedBox(height: 12),
@@ -635,6 +590,216 @@ class _ModeChooser extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _HumanVsAiConfig {
+  const _HumanVsAiConfig({
+    required this.timeControlSeconds,
+    required this.strength,
+    required this.maxDepth,
+    required this.maxThinkMs,
+  });
+
+  final int timeControlSeconds;
+  final AiStrength strength;
+  final int maxDepth;
+  final int maxThinkMs;
+}
+
+class _GameSetupDialog extends StatefulWidget {
+  const _GameSetupDialog({
+    required this.localTwoPlayer,
+    required this.initialTimeControlSeconds,
+    required this.initialStrength,
+    required this.initialMaxDepth,
+    required this.initialMaxThinkMs,
+  });
+
+  final bool localTwoPlayer;
+  final int initialTimeControlSeconds;
+  final AiStrength initialStrength;
+  final int initialMaxDepth;
+  final int initialMaxThinkMs;
+
+  @override
+  State<_GameSetupDialog> createState() => _GameSetupDialogState();
+}
+
+class _GameSetupDialogState extends State<_GameSetupDialog> {
+  late int _timeControlSeconds = widget.initialTimeControlSeconds;
+  late AiStrength _strength = widget.initialStrength;
+  late int _maxDepth = widget.initialMaxDepth;
+  late int _maxThinkMs = widget.initialMaxThinkMs;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.localTwoPlayer ? '本地双人' : '和电脑下'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.localTwoPlayer ? '两位玩家共用设备，红方先行。' : '先选好对局节奏，开始后也可以暂停。',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 20),
+              const Text('每方用时'),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                initialValue: _timeControlSeconds,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.timer_outlined),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 300, child: Text('5 分钟')),
+                  DropdownMenuItem(value: 600, child: Text('10 分钟')),
+                  DropdownMenuItem(value: 900, child: Text('15 分钟（推荐）')),
+                  DropdownMenuItem(value: 1800, child: Text('30 分钟')),
+                  DropdownMenuItem(value: 0, child: Text('不限时')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _timeControlSeconds = value);
+                  }
+                },
+              ),
+              if (!widget.localTwoPlayer) ...[
+                const SizedBox(height: 20),
+                const Text('电脑难度'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<AiStrength>(
+                  initialValue: _strength,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.smart_toy_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: AiStrength.easy,
+                      child: Text('入门 · 走得快，适合第一次玩'),
+                    ),
+                    DropdownMenuItem(
+                      value: AiStrength.normal,
+                      child: Text('普通 · 推荐'),
+                    ),
+                    DropdownMenuItem(
+                      value: AiStrength.hard,
+                      child: Text('较强 · 思考更久'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _strength = value;
+                        _maxDepth = value.maxDepth;
+                        _maxThinkMs = value.maxThinkMs;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '电脑会根据难度和剩余用时自动安排思考。',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF68716E),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: const Text('高级设置'),
+                  subtitle: const Text('通常不需要调整'),
+                  children: [
+                    _depthControl(
+                      title: '搜索深度上限',
+                      depth: _maxDepth,
+                      onChanged: (value) => setState(() => _maxDepth = value),
+                    ),
+                    _thinkTimeControl(),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton.icon(
+          onPressed: () => Navigator.pop(
+            context,
+            _HumanVsAiConfig(
+              timeControlSeconds: _timeControlSeconds,
+              strength: _strength,
+              maxDepth: _maxDepth,
+              maxThinkMs: _maxThinkMs,
+            ),
+          ),
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('开始对局'),
+        ),
+      ],
+    );
+  }
+
+  Widget _depthControl({
+    required String title,
+    required int depth,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(title),
+            const Spacer(),
+            Text(depth == 0 ? '自动' : '$depth 层'),
+          ],
+        ),
+        Slider(
+          value: depth.toDouble(),
+          min: 0,
+          max: AiStrength.maxConfiguredDepth.toDouble(),
+          divisions: AiStrength.maxConfiguredDepth,
+          label: depth == 0 ? '自动' : '$depth 层',
+          onChanged: (value) => onChanged(value.round()),
+        ),
+      ],
+    );
+  }
+
+  Widget _thinkTimeControl() {
+    return Row(
+      children: [
+        const Expanded(child: Text('基础思考时间')),
+        DropdownButton<int>(
+          value: const [300, 1500, 5000].contains(_maxThinkMs)
+              ? _maxThinkMs
+              : null,
+          hint: const Text('自定义'),
+          items: const [
+            DropdownMenuItem(value: 300, child: Text('较快')),
+            DropdownMenuItem(value: 1500, child: Text('标准')),
+            DropdownMenuItem(value: 5000, child: Text('更深')),
+          ],
+          onChanged: (value) {
+            if (value != null) setState(() => _maxThinkMs = value);
+          },
+        ),
+      ],
     );
   }
 }

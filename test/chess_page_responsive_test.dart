@@ -39,6 +39,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('本地双人'));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '开始对局'));
+    await tester.pumpAndSettle();
   }
 
   Future<void> waitForThemeAsset(WidgetTester tester, String asset) async {
@@ -201,6 +203,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('人机对局'));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '开始对局'));
+    await tester.pumpAndSettle();
     final sourceBloc = BlocProvider.of<ChessBloc>(
       tester.element(find.byType(ChessBoard)),
     );
@@ -286,6 +290,10 @@ void main() {
         tester.getRect(find.byKey(const ValueKey('settings-group-棋盘主题'))).width,
         greaterThan(800),
       );
+      expect(
+        tester.getRect(find.byKey(const ValueKey('settings-group-棋盘主题'))).top,
+        lessThan(240),
+      );
       await tester.tap(find.text('夜间胡桃木'));
       await tester.pumpAndSettle();
       await waitForThemeAsset(tester, 'assets/skins/night/board.png');
@@ -306,22 +314,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<SegmentedButton<String>>(
-              find.byType(SegmentedButton<String>),
-            )
+            .widget<ListTile>(find.widgetWithText(ListTile, '夜间胡桃木'))
             .selected,
-        {'assets/skins/night/config.json'},
+        isTrue,
       );
       await tester.tap(find.text('暖木经典'));
       await tester.pumpAndSettle();
       await waitForThemeAsset(tester, 'assets/skins/qqclassic/board.png');
       expect(
-        tester
-            .widget<SegmentedButton<String>>(
-              find.byType(SegmentedButton<String>),
-            )
-            .selected,
-        {'assets/skins/qqclassic/config.json'},
+        tester.widget<ListTile>(find.widgetWithText(ListTile, '暖木经典')).selected,
+        isTrue,
       );
       expect(
         BlocProvider.of<ThemeBloc>(
@@ -358,23 +360,18 @@ void main() {
     expect(find.text('AI 对战'), findsOneWidget);
     expect(find.text('红方电脑'), findsNothing);
     expect(find.text('黑方电脑'), findsNothing);
-    await tester.tap(find.text('15 分钟'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('5 分钟').last);
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<DropdownButtonFormField<int>>(
-            find.byType(DropdownButtonFormField<int>),
-          )
-          .initialValue,
-      300,
-    );
-    await tester.tap(find.text('普通').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('较强').last);
-    await tester.pumpAndSettle();
     await tester.tap(find.text('人机对局'));
+    await tester.pumpAndSettle();
+    expect(find.text('和电脑下'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('5 分钟'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<AiStrength>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('较强'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '开始对局'));
     await tester.pumpAndSettle();
 
     expect(

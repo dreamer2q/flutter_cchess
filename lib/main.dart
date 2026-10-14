@@ -5,6 +5,7 @@ import 'package:flutter_cchess/debug/ui_debug_overlay.dart';
 import 'package:flutter/services.dart';
 import 'package:bloc/bloc.dart';
 import 'package:flutter_cchess/chess/view/new_chess_page.dart';
+import 'package:flutter_cchess/theme/app_chrome.dart';
 
 class AppBlocObserver extends BlocObserver {
   @override
@@ -25,10 +26,10 @@ void main() {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarBrightness: Brightness.dark,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF171A1A),
-      systemNavigationBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: AppPalette.canvas,
+      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
   runApp(const MyApp());
@@ -41,16 +42,27 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '中国象棋',
-      builder: (context, child) =>
-          UiDebugOverlay(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => UiDebugOverlay(
+        // Keep diagnostics available for dedicated UI review builds without
+        // letting the debug affordance become part of the normal product UI.
+        enabled: const bool.fromEnvironment('UI_DEBUG'),
+        child: child ?? const SizedBox.shrink(),
+      ),
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2D9B73),
+          seedColor: AppPalette.accent,
           brightness: Brightness.light,
-          surface: const Color(0xFFF9F8F5),
+          surface: AppPalette.surface,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF3F1EC),
+        scaffoldBackgroundColor: AppPalette.canvas,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          foregroundColor: AppPalette.ink,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
         visualDensity: VisualDensity.standard,
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
